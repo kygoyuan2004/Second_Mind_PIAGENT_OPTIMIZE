@@ -1,0 +1,18 @@
+{
+  "minimumSystemVersion": "14.0",
+  "node": {
+    "version": "22.22.0",
+    "arm64": "5ed4db0fcf1eaf84d91ad12462631d73bf4576c1377e192d222e48026a902640",
+    "x64": "5ea50c9d6dea3dfa3abb66b2656f7a4e1c8cef23432b558d45fb538c7b5dedce"
+  },
+  "python": {
+    "version": "3.12.13",
+    "release": "20260623",
+    "arm64": "3724aa4dafb5f7b6c2cf98e89914e4248dc6bd2fe40407df4a2d73de99615f16",
+    "x64": "7c57fdd1fa675190093700eb0d8e7117e1f9eae7c30a46dea5f8d5266bcfc791"
+  },
+  "ffmpeg": {
+    "version": "9.1",
+    "sha256": "1a4d394ae63d190a526cd052eb4415c156b5c5e2df37efab41a7de0b8fde2433"
+  }
+}

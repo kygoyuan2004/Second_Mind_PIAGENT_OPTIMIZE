@@ -1,6 +1,6 @@
 {
-  "name": "second-mind",
-  "version": "0.2.1",
+  "name": "second-mind-pi",
+  "version": "0.3.0",
   "description": "Self-hosted Obsidian knowledge workspace powered by Pi Agent Core",
   "type": "module",
   "license": "MIT",
@@ -31,7 +31,8 @@
     "test:electron": "node --test test/desktop-shell.electron.mjs",
     "test:runtime": "node scripts/run-tests.mjs --runtime-only",
     "desktop:dev": "electron .",
-    "desktop:build:linux": "bash scripts/build-linux.sh"
+    "desktop:build:linux": "bash scripts/build-linux.sh",
+    "desktop:build:mac": "node scripts/package-macos.mjs"
   },
   "dependencies": {
     "@earendil-works/pi-agent-core": "1.6.0",
@@ -49,6 +50,6 @@
     "html-validate": "11.13.0"
   },
   "main": "desktop/main.mjs",
-  "productName": "Second Mind",
+  "productName": "Second Mind Pi",
   "homepage": "https://github.com/kygoyuan2004/Second_Mind_PIAGENT_OPTIMIZE"
 }

@@ -3,14 +3,9 @@ name: CI
 on:
   push:
     branches: [main, 'release/desktop-web-parity']
-    tags: ['v*']
   pull_request:
+  workflow_call:
   workflow_dispatch:
-    inputs:
-      publish_image:
-        description: Publish the verified Pi container image
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -195,6 +190,7 @@ jobs:
             printf 'KNOWLEDGE_BASE_HOST_PATH=%s\n' "${vault_root}"
             printf 'VAULTMIND_BIND_IP=127.0.0.1\n'
             printf 'VAULTMIND_PORT=18786\n'
+            printf 'SECOND_MIND_DATA_VOLUME=second-mind-ci_vaultmind-pi-data\n'
             printf 'VAULTMIND_UID=%s\n' "${runtime_uid}"
             printf 'VAULTMIND_GID=%s\n' "${runtime_gid}"
             printf 'ADMIN_PASSWORD_SECRET_PATH=%s/admin_password\n' "${secret_root}"
@@ -249,11 +245,11 @@ jobs:
           trap cleanup EXIT
           docker volume create \
             --label com.docker.compose.project=second-mind-ci \
-            --label com.docker.compose.volume=vaultmind-data \
-            second-mind-ci_vaultmind-data >/dev/null
+            --label com.docker.compose.volume=vaultmind-pi-data \
+            second-mind-ci_vaultmind-pi-data >/dev/null
           docker run --rm --user 0:0 \
             --mount type=bind,source="$GITHUB_WORKSPACE",target=/workspace,readonly \
-            --mount type=volume,source=second-mind-ci_vaultmind-data,target=/app/data \
+            --mount type=volume,source=second-mind-ci_vaultmind-pi-data,target=/app/data \
             second-mind:ci node /workspace/scripts/install.mjs internal-own-tree \
             --source /app/data --output-uid "$RUNTIME_UID" --output-gid "$RUNTIME_GID"
           phase='start Compose application'
@@ -322,51 +318,3 @@ jobs:
               }
             }
           "
-
-  publish:
-    name: Publish verified multi-architecture image
-    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.publish_image && github.ref == 'refs/heads/main')
-    needs: [node, history, container]
-    permissions:
-      contents: read
-      packages: write
-    uses: ./.github/workflows/container.yml
-
-  windows-desktop:
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release/desktop-web-parity'
-    uses: ./.github/workflows/windows-build.yml
-
-  linux-desktop:
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release/desktop-web-parity'
-    uses: ./.github/workflows/linux-desktop.yml
-
-  release-installers:
-    if: startsWith(github.ref, 'refs/tags/v')
-    needs: [publish, windows-desktop, linux-desktop]
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
-        with:
-          persist-credentials: false
-      - uses: actions/download-artifact@v4
-        with:
-          name: SecondMind-windows-x64
-          path: packages/windows
-      - uses: actions/download-artifact@v4
-        with:
-          name: SecondMind-linux-x64
-          path: packages/linux
-      - name: Publish verified installers and checksums
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          (cd packages/windows && sha256sum -c SHA256SUMS.txt)
-          (cd packages/linux && sha256sum -c SHA256SUMS.txt)
-          cat packages/{windows,linux}/SHA256SUMS.txt > SHA256SUMS.txt
-          notes="docs/release-notes-${GITHUB_REF_NAME#v}.md"
-          description=(--generate-notes)
-          if [[ -f "$notes" ]]; then description=(--notes-file "$notes"); fi
-          gh release create "$GITHUB_REF_NAME" --verify-tag --repo "$GITHUB_REPOSITORY" --title "Second Mind $GITHUB_REF_NAME" "${description[@]}" packages/windows/*.exe packages/linux/*.AppImage packages/linux/*.deb SHA256SUMS.txt

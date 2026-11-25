@@ -1,14 +1,14 @@
-# Second Mind Windows 桌面版
+# Second Mind Pi Windows 桌面版
 
 支持 Windows 10/11 x64。安装包已带有 Node.js、Python、媒体处理组件和 Pi Agent Core 与 Pi AI，无需预先安装开发工具。
 
-1. 运行 `SecondMind-<版本>-windows-x64-setup.exe`，按当前 Windows 用户安装。
+1. 运行 `SecondMindPi-<版本>-windows-x64-setup.exe`，按当前 Windows 用户安装。
 2. 启动后选择“本机使用”，通过目录选择器选择自己的 Markdown/Obsidian Vault。首次启动只建立关键词索引；模型、联网和 Embedding 需要在配置页面重新填写。
 3. 或选择“连接服务器”，填写现有服务器的 HTTPS 地址并使用原有账号登录。可信局域网可使用 HTTP，但录音权限仍由 Chromium 限制；需要录音时使用 HTTPS。
 
 窗口会持续显示当前使用模式。切换模式不会同步本机与服务器的数据，也不会取消服务器已提交的任务。关闭窗口默认收进托盘；托盘菜单的“退出”会停止本机后台与媒体处理。
 
-本机状态、配置、加密凭据和下载的模型位于 `%LOCALAPPDATA%\SecondMind`。Vault 保存在选定位置。升级时运行新安装包；卸载保留 Vault 和用户状态。
+本机状态、配置、加密凭据和下载的模型位于 `%LOCALAPPDATA%\SecondMindPi`。Vault 保存在选定位置。升级时运行新安装包；卸载保留 Vault 和用户状态。
 
 ## 录音与视频
 
@@ -23,4 +23,4 @@
 - 服务器证书错误：修复服务器证书后重连。软件不忽略证书验证。
 - 迁移到新电脑：复制自己的 Vault，再重新配置本机连接。凭据使用当前 Windows 用户加密，不能直接复制密文供另一用户使用。
 
-安装器校验方法：在 PowerShell 中运行 `Get-FileHash .\SecondMind-<版本>-windows-x64-setup.exe -Algorithm SHA256`，与同目录 `SHA256SUMS.txt` 对照。
+安装器校验方法：在 PowerShell 中运行 `Get-FileHash .\SecondMindPi-<版本>-windows-x64-setup.exe -Algorithm SHA256`，与同目录 `SHA256SUMS.txt` 对照。

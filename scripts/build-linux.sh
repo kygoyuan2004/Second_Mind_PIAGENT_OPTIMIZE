@@ -2,7 +2,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 if [[ $(uname -sm) != "Linux x86_64" ]]; then echo 'Build Linux desktop on Linux x86_64.' >&2; exit 1; fi
-image=second-mind:desktop-linux-build
+image=second-mind-pi:desktop-linux-build
 if [[ -n ${SECOND_MIND_BUILD_IMAGE:-} ]]; then image=$SECOND_MIND_BUILD_IMAGE; else docker build --platform linux/amd64 -t "$image" .; fi
 stage="$PWD/build/linux"
 mkdir -p "$stage"

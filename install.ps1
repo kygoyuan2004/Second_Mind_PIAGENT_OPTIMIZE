@@ -251,7 +251,7 @@ function Assert-NativeStateMarkerFile(
     }
     $fileSize = ([uint64] $Information.FileSizeHigh * [uint64] 4294967296) +
         [uint64] $Information.FileSizeLow
-    $expectedSize = [uint64] [Text.Encoding]::UTF8.GetByteCount("second-mind-installer-state-v1`n")
+    $expectedSize = [uint64] [Text.Encoding]::UTF8.GetByteCount("second-mind-pi-installer-state-v1`n")
     if ($fileSize -ne $expectedSize) {
         throw 'Installer state marker is invalid.'
     }
@@ -322,7 +322,7 @@ function Read-ValidatedStateMarker([string] $Marker) {
             } finally {
                 $linkedHandle.Dispose()
             }
-            if ($value -ne "second-mind-installer-state-v1`n") {
+            if ($value -ne "second-mind-pi-installer-state-v1`n") {
                 throw 'Installer state marker is invalid.'
             }
             return $value
@@ -355,7 +355,7 @@ function Assert-DedicatedStateDirectory(
             throw 'Installer state must not use the user profile root.'
         }
     }
-    $marker = Join-Path $canonicalDirectory '.second-mind-installer-state'
+    $marker = Join-Path $canonicalDirectory '.second-mind-pi-installer-state'
     $entries = @(Get-ChildItem -LiteralPath $canonicalDirectory -Force)
     $markerValue = Read-ValidatedStateMarker $marker
     if ($null -ne $markerValue) {
@@ -370,9 +370,9 @@ $RepoRoot = Resolve-CanonicalDirectory $PSScriptRoot
 if (-not [string]::IsNullOrWhiteSpace($env:SECOND_MIND_CONFIG_HOME)) {
     $StateRoot = [IO.Path]::GetFullPath($env:SECOND_MIND_CONFIG_HOME)
 } elseif (-not [string]::IsNullOrWhiteSpace($env:LOCALAPPDATA)) {
-    $StateRoot = Join-Path $env:LOCALAPPDATA 'Second Mind'
+    $StateRoot = Join-Path $env:LOCALAPPDATA 'Second Mind Pi'
 } else {
-    $StateRoot = Join-Path $HOME 'AppData\Local\Second Mind'
+    $StateRoot = Join-Path $HOME 'AppData\Local\Second Mind Pi'
 }
 [IO.Directory]::CreateDirectory($StateRoot) | Out-Null
 $StateRoot = Resolve-CanonicalDirectory $StateRoot
@@ -506,7 +506,7 @@ if ($PasswordThroughStdin) {
 }
 
 $InstanceId = Read-Value (Join-Path $StateRoot 'current')
-if ($InstanceId -notmatch '^second-mind-[a-z0-9][a-z0-9-]{5,48}[a-z0-9]$') {
+if ($InstanceId -notmatch '^second-mind-pi-[a-z0-9][a-z0-9-]{5,48}[a-z0-9]$') {
     throw 'Installer returned an invalid instance identifier.'
 }
 $InstanceRoot = Join-Path $StateRoot $InstanceId

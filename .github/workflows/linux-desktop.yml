@@ -23,17 +23,23 @@ jobs:
           image=$(realpath dist/linux/*.AppImage)
           work=$(mktemp -d)
           (cd "$work" && "$image" --appimage-extract >/dev/null)
-          xvfb-run -a env SECOND_MIND_PACKAGED_EXECUTABLE="$work/squashfs-root/second-mind" node --test test/desktop-shell.electron.mjs
+          xvfb-run -a env SECOND_MIND_PACKAGED_EXECUTABLE="$work/squashfs-root/second-mind-pi" node --test test/desktop-shell.electron.mjs
           package=$(realpath dist/linux/*.deb)
           sudo apt-get update -qq
           sudo apt-get install -y "$package"
-          binary=$(command -v second-mind)
+          binary=$(command -v second-mind-pi)
           test -x "$binary"
           xvfb-run -a env SECOND_MIND_PACKAGED_EXECUTABLE="$binary" node --test test/desktop-shell.electron.mjs
+          original=$(node scripts/fetch-claude-installer.mjs)
+          sudo apt-get install -y "$original"
+          state="$RUNNER_TEMP/two-desktop-editions"
+          xvfb-run -a node scripts/desktop-coexistence.mjs pair "$state" "$(command -v second-mind)" "$binary"
+          sudo apt-get remove -y second-mind-pi
+          xvfb-run -a node scripts/desktop-coexistence.mjs survivor "$state" "$(command -v second-mind)"
           sudo apt-get remove -y second-mind
       - uses: actions/upload-artifact@v4
         with:
-          name: SecondMind-linux-x64
+          name: SecondMindPi-linux-x64
           path: |
             dist/linux/*.deb
             dist/linux/*.AppImage

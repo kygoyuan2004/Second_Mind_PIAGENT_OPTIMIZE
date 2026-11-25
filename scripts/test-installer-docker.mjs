@@ -104,7 +104,7 @@ try {
 } finally {
   // Also collect a partially initialized instance when a gate assertion fails.
   for (const name of await fs.readdir(state).catch(() => [])) {
-    if (!/^second-mind-[a-z0-9-]+$/u.test(name)) continue;
+    if (!/^second-mind-pi-[a-z0-9-]+$/u.test(name)) continue;
     const metadata = await fs.readFile(path.join(state, name, 'instance.json'), 'utf8').then(JSON.parse).catch(() => null);
     if (metadata && !instances.some((v) => v.instanceId === name)) instances.push(metadata);
   }

@@ -160,15 +160,15 @@ test('parses public commands and rejects unknown or malformed options', () => {
 test('noninteractive init writes isolated state and never stores passwords in dotenv', async (t) => {
   const setup = await initializedFixture(t, 'state');
   const { result, instanceRoot } = setup;
-  assert.match(result.instanceId, /^second-mind-[a-f0-9]{12}$/u);
+  assert.match(result.instanceId, /^second-mind-pi-[a-f0-9]{12}$/u);
   assert.equal(result.projectName, result.instanceId);
   assert.equal(result.dataVolume, `${result.instanceId}-data`);
   assert.equal(result.port, 9123);
 
   const dotenv = await fsp.readFile(path.join(instanceRoot, '.env'), 'utf8');
   const portableVault = normalizeHostPath(setup.vault, setup.options);
-  assert.match(dotenv, /^COMPOSE_PROJECT_NAME=second-mind-[a-f0-9]{12}$/mu);
-  assert.match(dotenv, /^SECOND_MIND_DATA_VOLUME=second-mind-[a-f0-9]{12}-data$/mu);
+  assert.match(dotenv, /^COMPOSE_PROJECT_NAME=second-mind-pi-[a-f0-9]{12}$/mu);
+  assert.match(dotenv, /^SECOND_MIND_DATA_VOLUME=second-mind-pi-[a-f0-9]{12}-data$/mu);
   assert.match(dotenv, /^SECOND_MIND_IMAGE=ghcr\.io\/kygoyuan2004\/second_mind_piagent_optimize:latest$/mu);
   assert.match(dotenv, /^VAULTMIND_UID=1234$/mu);
   assert.match(dotenv, /^VAULTMIND_GID=2345$/mu);
@@ -323,9 +323,9 @@ test('state roots must be dedicated before permissions or files are changed', as
 
 test('installer-state markers reject symbolic and hard-linked files without touching their targets', async (t) => {
   const setup = await fixture(t, 'state-marker-links');
-  const marker = path.join(setup.stateRoot, '.second-mind-installer-state');
+  const marker = path.join(setup.stateRoot, '.second-mind-pi-installer-state');
   const external = path.join(setup.root, 'external-marker.txt');
-  const markerContents = 'second-mind-installer-state-v1\n';
+  const markerContents = 'second-mind-pi-installer-state-v1\n';
   await fsp.writeFile(external, markerContents, { mode: 0o600 });
 
   let symlinkCreated = false;
@@ -364,9 +364,9 @@ test('installer-state markers reject symbolic and hard-linked files without touc
 
 test('installer-state marker validation rejects a path swapped between lstat and open', async (t) => {
   const setup = await fixture(t, 'state-marker-race');
-  const marker = path.join(setup.stateRoot, '.second-mind-installer-state');
+  const marker = path.join(setup.stateRoot, '.second-mind-pi-installer-state');
   const displaced = path.join(setup.stateRoot, 'displaced-marker');
-  const markerContents = 'second-mind-installer-state-v1\n';
+  const markerContents = 'second-mind-pi-installer-state-v1\n';
   await fsp.writeFile(marker, markerContents, { mode: 0o600 });
   let replaced = false;
   const racingFileSystem = {
@@ -393,9 +393,9 @@ test('installer-state marker validation rejects a path swapped after its handle 
   skip: process.platform === 'win32',
 }, async (t) => {
   const setup = await fixture(t, 'state-marker-post-open-race');
-  const marker = path.join(setup.stateRoot, '.second-mind-installer-state');
+  const marker = path.join(setup.stateRoot, '.second-mind-pi-installer-state');
   const displaced = path.join(setup.stateRoot, 'opened-marker');
-  const markerContents = 'second-mind-installer-state-v1\n';
+  const markerContents = 'second-mind-pi-installer-state-v1\n';
   await fsp.writeFile(marker, markerContents, { mode: 0o600 });
   let lstatCalls = 0;
   const racingFileSystem = {
@@ -700,8 +700,8 @@ test('runtime ownership helper handles nested trees without following symlinks',
   });
   assert.equal(result.uid, process.getuid?.() ?? 0);
   assert.equal(await fsp.readFile(external, 'utf8'), 'outside\n');
-  assert.equal(path.basename(result.marker), '.second-mind-volume');
-  assert.equal(await fsp.readFile(result.marker, 'utf8'), 'second-mind-runtime-volume-v1\n');
+  assert.equal(path.basename(result.marker), '.second-mind-pi-volume');
+  assert.equal(await fsp.readFile(result.marker, 'utf8'), 'second-mind-pi-runtime-volume-v1\n');
   assert.equal((await fsp.stat(runtime)).mode & 0o777, 0o700);
   assert.equal((await fsp.stat(result.marker)).mode & 0o777, 0o600);
   assert.deepEqual(await ownRuntimeTree(runtime, {
@@ -718,7 +718,7 @@ test('runtime ownership helper rejects symbolic and hard-linked volume markers',
   const external = path.join(setup.root, 'external.txt');
   await fsp.mkdir(runtime);
   await fsp.writeFile(external, 'outside\n');
-  await fsp.symlink(external, path.join(runtime, '.second-mind-volume'));
+  await fsp.symlink(external, path.join(runtime, '.second-mind-pi-volume'));
   await assert.rejects(
     () => ownRuntimeTree(runtime, {
       outputUid: String(process.getuid?.() ?? 0),
@@ -727,8 +727,8 @@ test('runtime ownership helper rejects symbolic and hard-linked volume markers',
     { code: 'RUNTIME_VOLUME_MARKER_INVALID' },
   );
   assert.equal(await fsp.readFile(external, 'utf8'), 'outside\n');
-  await fsp.unlink(path.join(runtime, '.second-mind-volume'));
-  await fsp.link(external, path.join(runtime, '.second-mind-volume'));
+  await fsp.unlink(path.join(runtime, '.second-mind-pi-volume'));
+  await fsp.link(external, path.join(runtime, '.second-mind-pi-volume'));
   await assert.rejects(
     () => ownRuntimeTree(runtime, {
       outputUid: String(process.getuid?.() ?? 0),
@@ -802,11 +802,11 @@ $marker = [IO.Path]::GetTempFileName()
 try {
     [IO.File]::WriteAllText(
         $marker,
-        "second-mind-installer-state-v1\`n",
+        "second-mind-pi-installer-state-v1\`n",
         [Text.UTF8Encoding]::new($false)
     )
     $value = Read-ValidatedStateMarker $marker
-    if ($value -ne "second-mind-installer-state-v1\`n") {
+    if ($value -ne "second-mind-pi-installer-state-v1\`n") {
         throw 'The validated marker content changed.'
     }
     Write-Output 'native marker smoke: OK'

@@ -35,10 +35,10 @@ DISPLAY=:89 .local/toolchain/node_modules/node/bin/node --test test/desktop-shel
 PowerShell 示例（替换安装目录和测试目录）：
 
 ```powershell
-$installDir = Join-Path $env:LOCALAPPDATA 'Programs\Second Mind'
+$installDir = Join-Path $env:LOCALAPPDATA 'Programs\Second Mind Pi'
 $acceptanceDir = Join-Path $env:TEMP 'SecondMindAcceptance'
 Set-Location $acceptanceDir
-$env:SECOND_MIND_PACKAGED_EXECUTABLE = Join-Path $installDir 'Second Mind.exe'
+$env:SECOND_MIND_PACKAGED_EXECUTABLE = Join-Path $installDir 'Second Mind Pi.exe'
 & (Join-Path $installDir 'resources\runtime\node\node.exe') --test test\desktop-shell.electron.mjs
 ```
 

@@ -1,9 +1,9 @@
 /** Build-host tools and private state never enter the installable application. */
 const path = require('node:path');
 module.exports = {
-  appId: 'io.secondmind.desktop',
-  productName: 'Second Mind',
-  artifactName: 'SecondMind-${version}-windows-${arch}-setup.${ext}',
+  appId: 'io.secondmind.pi.desktop',
+  productName: 'Second Mind Pi',
+  artifactName: 'SecondMindPi-${version}-windows-${arch}-setup.${ext}',
   directories: { output: 'dist/windows', buildResources: 'build/assets' },
   asar: true,
   npmRebuild: false,
@@ -46,6 +46,6 @@ module.exports = {
     deleteAppDataOnUninstall: false,
     runAfterFinish: true,
     installerLanguages: ['zh_CN', 'en_US'],
-    shortcutName: 'Second Mind',
+    shortcutName: 'Second Mind Pi',
   },
 };

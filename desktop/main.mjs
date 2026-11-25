@@ -15,11 +15,11 @@ const shellUrl = pathToFileURL(shellPath).href;
 const toolbarHeight = 64;
 const stateRoot = !app.isPackaged && process.env.SECOND_MIND_DESKTOP_STATE_ROOT
   ? path.resolve(process.env.SECOND_MIND_DESKTOP_STATE_ROOT)
-  : path.join(process.platform === 'win32' ? process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local') : app.getPath('appData'), 'SecondMind');
-if (app.isPackaged) setNativeHelperPath(path.join(process.resourcesPath, 'backend', 'platform', 'native', 'SecondMind.Platform.exe'));
+  : path.join(process.platform === 'win32' ? process.env.LOCALAPPDATA || path.join(app.getPath('home'), 'AppData', 'Local') : app.getPath('appData'), 'SecondMindPi');
+if (app.isPackaged && process.platform === 'win32') setNativeHelperPath(path.join(process.resourcesPath, 'backend', 'platform', 'native', 'SecondMind.Platform.exe'));
 await protectPrivateDirectory(stateRoot);
 app.setPath('userData', stateRoot);
-app.setAppUserModelId('io.secondmind.desktop');
+app.setAppUserModelId('io.secondmind.pi.desktop');
 const singleInstance = app.requestSingleInstanceLock();
 if (!singleInstance) app.quit();
 
@@ -56,8 +56,8 @@ function publish() {
   if (quitting) return;
   if (window && !window.isDestroyed()) window.webContents.send('desktop:state', state());
   const connection = prefs?.connections.find((item) => item.id === activeConnectionId);
-  if (window && !window.isDestroyed()) window.setTitle(activeMode === 'remote' ? `Second Mind — 远程 · ${connection?.name || '服务器'}` : activeMode === 'local' ? 'Second Mind — 本机' : 'Second Mind');
-  tray?.setToolTip(`Second Mind · 本机后台${backend?.status().state === 'ready' ? '运行中' : '未就绪'}`);
+  if (window && !window.isDestroyed()) window.setTitle(activeMode === 'remote' ? `Second Mind Pi — 远程 · ${connection?.name || '服务器'}` : activeMode === 'local' ? 'Second Mind Pi — 本机' : 'Second Mind Pi');
+  tray?.setToolTip(`Second Mind Pi · 本机后台${backend?.status().state === 'ready' ? '运行中' : '未就绪'}`);
 }
 
 async function runOperation(name, action) {
@@ -311,7 +311,7 @@ function registerIpc() {
 
 function createMenu() {
   Menu.setApplicationMenu(Menu.buildFromTemplate([
-    { label: 'Second Mind', submenu: [{ label: '工作区与连接', click: showHome }, { type: 'separator' }, { label: '退出', accelerator: 'Alt+F4', click: () => app.quit() }] },
+    { label: 'Second Mind Pi', submenu: [{ label: '工作区与连接', click: showHome }, { type: 'separator' }, { label: '退出', accelerator: 'Alt+F4', click: () => app.quit() }] },
     { label: '编辑', submenu: [{ role: 'undo' }, { role: 'redo' }, { type: 'separator' }, { role: 'cut' }, { role: 'copy' }, { role: 'paste' }, { role: 'selectAll' }] },
     { label: '查看', submenu: [{ label: '刷新工作区', accelerator: 'CmdOrCtrl+R', click: () => activeView?.webContents.reload() }, { role: 'resetZoom' }, { role: 'zoomIn' }, { role: 'zoomOut' }, { role: 'togglefullscreen' }] },
   ]));
@@ -323,7 +323,7 @@ async function createTray() {
   try { await fs.access(iconPath); icon = nativeImage.createFromPath(iconPath); } catch { /* Source checkout fallback. */ }
   if (!icon || icon.isEmpty()) icon = nativeImage.createFromDataURL('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABAAAAAQCAYAAAAf8/9hAAAAHUlEQVQ4T2NkYPj/n4ECwESJ5lEDRg0YNWAwGQAAfM8CHlc+rqIAAAAASUVORK5CYII=');
   tray = new Tray(icon.resize({ width: 20, height: 20 }));
-  tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开 Second Mind', click: () => { window.show(); window.focus(); } }, { label: '工作区与连接', click: () => { showHome(); window.show(); } }, { type: 'separator' }, { label: '退出并停止本机任务', click: () => app.quit() }]));
+  tray.setContextMenu(Menu.buildFromTemplate([{ label: '打开 Second Mind Pi', click: () => { window.show(); window.focus(); } }, { label: '工作区与连接', click: () => { showHome(); window.show(); } }, { type: 'separator' }, { label: '退出并停止本机任务', click: () => app.quit() }]));
   tray.on('double-click', () => { window.show(); window.focus(); });
 }
 
@@ -346,7 +346,7 @@ async function initialize() {
     }
     publish();
   });
-  window = new BrowserWindow({ width: 1320, height: 920, minWidth: 850, minHeight: 620, title: 'Second Mind', backgroundColor: '#f5f5f7', show: false, webPreferences: { preload: path.join(desktopRoot, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, devTools: !app.isPackaged, partition: 'second-mind-shell' } });
+  window = new BrowserWindow({ width: 1320, height: 920, minWidth: 850, minHeight: 620, title: 'Second Mind Pi', backgroundColor: '#f5f5f7', show: false, webPreferences: { preload: path.join(desktopRoot, 'preload.cjs'), sandbox: true, contextIsolation: true, nodeIntegration: false, webSecurity: true, devTools: !app.isPackaged, partition: 'second-mind-shell' } });
   window.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
   window.webContents.on('will-navigate', (event, url) => { if (url !== shellUrl) event.preventDefault(); });
   window.webContents.on('will-attach-webview', (event) => event.preventDefault());
@@ -382,4 +382,4 @@ app.on('before-quit', (event) => {
     finally { clearTimeout(deadline); tray?.destroy(); app.exit(exitCode); }
   })();
 });
-if (singleInstance) app.whenReady().then(initialize).catch((error) => { dialog.showErrorBox('Second Mind 启动失败', error.message); app.exit(1); });
+if (singleInstance) app.whenReady().then(initialize).catch((error) => { dialog.showErrorBox('Second Mind Pi 启动失败', error.message); app.exit(1); });

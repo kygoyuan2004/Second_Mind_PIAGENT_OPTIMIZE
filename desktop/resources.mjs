@@ -6,16 +6,16 @@ export function resolveDesktopResources({ appRoot, resourcesPath = appRoot, pack
   const backendRoot = packaged ? path.join(resourcesPath, 'backend') : appRoot;
   const runtimeRoot = packaged ? path.join(resourcesPath, 'runtime') : path.join(appRoot, 'build', 'runtime', 'win-x64');
   const windows = process.platform === 'win32';
-  const linuxBin = packaged && !windows ? path.join(runtimeRoot, 'bin') : '';
+  const posixBin = packaged && ['linux', 'darwin'].includes(process.platform) ? path.join(runtimeRoot, 'bin') : '';
   const developmentNode = path.join(appRoot, '.local', 'toolchain', 'node_modules', 'node', 'bin', 'node');
   return {
     appRoot: backendRoot,
     runtimeRoot,
-    node: windows ? path.join(runtimeRoot, 'node', 'node.exe') : linuxBin ? path.join(linuxBin, 'node') : process.env.SECOND_MIND_NODE || (fs.existsSync(developmentNode) ? developmentNode : 'node'),
-    python: windows ? path.join(runtimeRoot, 'python', 'python.exe') : linuxBin ? path.join(linuxBin, 'python') : process.env.KNOWLEDGE_SPEECH_PYTHON || '/usr/bin/python3',
-    ffmpeg: windows ? path.join(runtimeRoot, 'ffmpeg', 'bin', 'ffmpeg.exe') : linuxBin ? path.join(linuxBin, 'ffmpeg') : process.env.KNOWLEDGE_VIDEO_FFMPEG || '/usr/bin/ffmpeg',
-    ffprobe: windows ? path.join(runtimeRoot, 'ffmpeg', 'bin', 'ffprobe.exe') : linuxBin ? path.join(linuxBin, 'ffprobe') : '/usr/bin/ffprobe',
-    ytdlp: windows ? path.join(runtimeRoot, 'python', 'python.exe') : linuxBin ? path.join(linuxBin, 'python') : process.env.KNOWLEDGE_SPEECH_PYTHON || '/usr/bin/python3',
+    node: windows ? path.join(runtimeRoot, 'node', 'node.exe') : posixBin ? path.join(posixBin, 'node') : process.env.SECOND_MIND_NODE || (fs.existsSync(developmentNode) ? developmentNode : 'node'),
+    python: windows ? path.join(runtimeRoot, 'python', 'python.exe') : posixBin ? path.join(posixBin, 'python') : process.env.KNOWLEDGE_SPEECH_PYTHON || '/usr/bin/python3',
+    ffmpeg: windows ? path.join(runtimeRoot, 'ffmpeg', 'bin', 'ffmpeg.exe') : posixBin ? path.join(posixBin, 'ffmpeg') : process.env.KNOWLEDGE_VIDEO_FFMPEG || '/usr/bin/ffmpeg',
+    ffprobe: windows ? path.join(runtimeRoot, 'ffmpeg', 'bin', 'ffprobe.exe') : posixBin ? path.join(posixBin, 'ffprobe') : '/usr/bin/ffprobe',
+    ytdlp: windows ? path.join(runtimeRoot, 'python', 'python.exe') : posixBin ? path.join(posixBin, 'python') : process.env.KNOWLEDGE_SPEECH_PYTHON || '/usr/bin/python3',
     platformHelper: path.join(backendRoot, 'platform', 'native', 'SecondMind.Platform.exe'),
   };
 }

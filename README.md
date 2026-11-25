@@ -37,6 +37,10 @@ Second Mind 是面向单管理员的自托管 Obsidian 工作台。比如，你�
 
 <a name="quick-start"></a>
 
+## 桌面版和 Docker
+
+Windows 和 Linux x64 可与 Claude SDK 版并装。macOS 14 或以上可使用独立的 Apple Silicon 或 Intel DMG。安装与校验见[发行记录](https://github.com/kygoyuan2004/Second_Mind_PIAGENT_OPTIMIZE/releases)和[macOS 首次打开指引](docs/macos-desktop.md)。Pi Docker 默认使用 `8788`，设置、凭据和数据卷与原版独立。两版选中同一份 Obsidian Vault 时，请依次执行写入任务。
+
 ## 从源码问第一个问题
 
 需要 Git 和 Node.js（22.x 从 22.22.0 起，或 24.8.0 及以上）。在一个新目录克隆项目并安装锁定的依赖。

@@ -82,7 +82,7 @@ async function start(message) {
   const { SessionManager } = await import('../src/auth.mjs');
   const config = createConfig({
     projectRoot: appRoot, publicDir: path.join(appRoot, 'public'),
-    host: '127.0.0.1', port: 0, appName: 'Second Mind',
+    host: '127.0.0.1', port: 0, appName: 'Second Mind Pi',
     vaultPath: vaults[0].path, vaultLabel: vaults[0].name,
     dataDir, indexDir: path.join(dataDir, 'index'), draftDir: path.join(dataDir, 'drafts'),
     recoveryDir: path.join(dataDir, 'recovery'), conversationFile: path.join(dataDir, 'conversations.json'),

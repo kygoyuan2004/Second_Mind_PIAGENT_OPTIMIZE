@@ -37,6 +37,10 @@ Ordinary Q&A retains its 20-turn, 10-minute limit. Deep Q&A can use up to 50 tur
 
 <a name="quick-start"></a>
 
+## Desktop and Docker
+
+Install Pi alongside Claude SDK on Windows or Linux x64. Native Apple Silicon and Intel disk images target macOS 14 or later. See the [release files and checksums](https://github.com/kygoyuan2004/Second_Mind_PIAGENT_OPTIMIZE/releases) and [macOS first launch guide](docs/macos-desktop.md). Docker uses local port `8788` with independent settings, credentials and volumes. When both editions use the same Obsidian Vault, run writing tasks one edition at a time.
+
 ## Ask your first question from source
 
 Install Git and Node.js (22.x starting at 22.22.0, or 24.8.0 and later). In a fresh directory, clone this edition and install the locked dependencies.

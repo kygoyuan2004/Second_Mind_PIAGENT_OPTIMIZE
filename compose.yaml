@@ -1,3 +1,5 @@
+name: second-mind-pi
+
 services:
   app:
     build:
@@ -11,7 +13,7 @@ services:
       NODE_ENV: production
       HOST: 0.0.0.0
       PORT: 8787
-      APP_NAME: "${APP_NAME:-Second Mind}"
+      APP_NAME: "${APP_NAME:-Second Mind Pi}"
       VAULT_LABEL: "${VAULT_LABEL:-My Obsidian Vault}"
       TIMEZONE: "${TIMEZONE:-UTC}"
       TRUST_PROXY: "${TRUST_PROXY:-false}"
@@ -58,11 +60,11 @@ services:
       SYNC_PROVIDER: "${SYNC_PROVIDER:-filesystem}"
       SYNC_DISPLAY_NAME: "${SYNC_DISPLAY_NAME:-Filesystem}"
     ports:
-      - "${VAULTMIND_BIND_IP:-127.0.0.1}:${VAULTMIND_PORT:-8787}:8787"
+      - "${VAULTMIND_BIND_IP:-127.0.0.1}:${VAULTMIND_PORT:-8788}:8787"
     extra_hosts:
       - "host.docker.internal:host-gateway"
     volumes:
-      - vaultmind-data:/app/data
+      - vaultmind-pi-data:/app/data
       - type: bind
         source: "${KNOWLEDGE_BASE_HOST_PATH:-./vault}"
         target: /vaults
@@ -89,4 +91,5 @@ services:
       retries: 10
 
 volumes:
-  vaultmind-data:
+  vaultmind-pi-data:
+    name: "${SECOND_MIND_DATA_VOLUME:-vaultmind-pi-data}"

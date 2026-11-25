@@ -222,7 +222,7 @@ export function createConfig(overrides = {}) {
   );
   const config = {
     projectRoot: PROJECT_ROOT,
-    appName: text('APP_NAME', 'Second Mind'),
+    appName: text('APP_NAME', 'Second Mind Pi'),
     vaultLabel: text('VAULT_LABEL', 'My Obsidian Vault'),
     host: text('HOST', '127.0.0.1'),
     port: overrides.port === 0 ? 0 : integer('PORT', 8787, { min: 1, max: 65_535 }),

@@ -10,9 +10,9 @@ const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const stage = path.resolve(process.argv[2]);
 const out = path.join(root, 'dist', 'linux');
 await build({ publish: 'never', projectDir: root, targets: Platform.LINUX.createTarget(['AppImage', 'deb'], Arch.x64), config: {
-  extends: null, appId: 'io.secondmind.desktop', productName: 'Second Mind', asar: true, npmRebuild: false,
+  extends: null, appId: 'io.secondmind.pi.desktop', productName: 'Second Mind Pi', asar: true, npmRebuild: false,
   directories: { output: out, buildResources: 'build/assets' },
-  artifactName: 'SecondMind-${version}-linux-${arch}.${ext}',
+  artifactName: 'SecondMindPi-${version}-linux-${arch}.${ext}',
   files: ['desktop/**/*', 'platform/*.mjs', 'package.json', '!node_modules/**'],
   extraResources: [
     { from: path.join(stage, 'backend'), to: 'backend', filter: ['**/*', '!node_modules/**', '!node_modules'] },
@@ -20,7 +20,7 @@ await build({ publish: 'never', projectDir: root, targets: Platform.LINUX.create
     { from: path.join(stage, 'runtime'), to: 'runtime' },
   ],
   electronDist: path.dirname(electronExecutable),
-  linux: { category: 'Office', executableName: 'second-mind', maintainer: 'Second Mind maintainers <opensource@users.noreply.github.com>' },
+  linux: { category: 'Office', executableName: 'second-mind-pi', maintainer: 'Second Mind maintainers <opensource@users.noreply.github.com>' },
   extraMetadata: { homepage: 'https://github.com/kygoyuan2004/Second_Mind_PIAGENT_OPTIMIZE' },
   afterPack: async ({ appOutDir }) => {
     for (const file of ['runtime/bin/python','runtime/bin/node','runtime/bin/ffmpeg','backend/node_modules/@earendil-works/pi-ai/dist/index.js','backend/node_modules/@earendil-works/pi-agent-core/dist/index.js','backend/public/study-plan/daily.html']) {

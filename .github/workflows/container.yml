@@ -33,7 +33,7 @@ jobs:
         with:
           images: ghcr.io/kygoyuan2004/second_mind_piagent_optimize
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref_name, '-') }}
             type=sha,prefix=sha-
             type=ref,event=tag
       - name: Build candidate image from the allowlisted context
@@ -100,3 +100,9 @@ jobs:
             [[ -z "$tag" ]] || tags+=(--tag "$tag")
           done <<< "$RELEASE_TAGS"
           docker buildx imagetools create "${tags[@]}" "$CANDIDATE"
+          expected="${CANDIDATE##*@}"
+          while IFS= read -r tag; do
+            [[ -z "$tag" ]] && continue
+            actual=$(docker buildx imagetools inspect "$tag" | awk '$1 == "Digest:" && !seen { print $2; seen=1 }')
+            test "$actual" = "$expected"
+          done <<< "$RELEASE_TAGS"

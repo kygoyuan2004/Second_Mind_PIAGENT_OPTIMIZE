@@ -39,7 +39,7 @@ Linux 可以执行 `python3 scripts/prepare-windows-runtime.py` 交叉准备运�
 $r = 'D:\AI_Knowledge_software\installed\resources'
 & "$r\runtime\node\node.exe" scripts/windows-native-acceptance.mjs --backend "$r\backend" --work-dir 'D:\AI_Knowledge_software\acceptance-native' --label 'Windows 实机安装产物'
 & "$r\runtime\node\node.exe" scripts/windows-media-acceptance.mjs --resources $r --work-dir 'D:\AI_Knowledge_software\acceptance-media'
-$env:SECOND_MIND_PACKAGED_EXECUTABLE = 'D:\AI_Knowledge_software\installed\Second Mind.exe'
+$env:SECOND_MIND_PACKAGED_EXECUTABLE = 'D:\AI_Knowledge_software\installed\Second Mind Pi.exe'
 & "$r\runtime\node\node.exe" --test test/desktop-shell.electron.mjs
 ```
 

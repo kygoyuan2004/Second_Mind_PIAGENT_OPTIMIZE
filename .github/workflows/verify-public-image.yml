@@ -1,0 +1,22 @@
+name: Verify public Docker editions
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Pi release tag approved for public registry verification
+        required: true
+        default: v0.3.0
+permissions:
+  contents: read
+jobs:
+  coexist:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify anonymous pulls, published digests, and the installer lifecycle
+        env:
+          VERSION: ${{ inputs.version }}
+        run: bash scripts/verify-docker-editions.sh "$VERSION"

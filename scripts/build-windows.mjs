@@ -86,7 +86,7 @@ if (prepareOnly) {
   });
   try { await build({ publish: 'never', projectDir: root, targets: Platform.WINDOWS.createTarget(['nsis'], Arch.x64), config: configuration }); }
   finally { restoreExtraction(); }
-  const files = (await fs.readdir(output)).filter((file) => /^SecondMind-.*-windows-x64-setup\.exe$/.test(file));
+  const files = (await fs.readdir(output)).filter((file) => /^SecondMindPi-.*-windows-x64-setup\.exe$/.test(file));
   if (!files.length) throw new Error('No Windows installer was produced');
   const checksums = await Promise.all(files.map(async (file) => `${await digest(path.join(output, file))}  ${file}`));
   await fs.writeFile(path.join(output, 'SHA256SUMS.txt'), checksums.join('\n') + '\n');

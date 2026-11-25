@@ -40,7 +40,7 @@ jobs:
           New-Item -ItemType Directory -Force $acceptance | Out-Null
           $process = Start-Process -FilePath $installers[0].FullName -ArgumentList @('/S', "/D=$installed") -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Installer exited $($process.ExitCode)" }
-          foreach ($file in @('Second Mind.exe', 'resources/runtime/node/node.exe', 'resources/backend/node_modules/@earendil-works/pi-ai/dist/index.js', 'resources/backend/node_modules/@earendil-works/pi-agent-core/dist/index.js')) {
+          foreach ($file in @('Second Mind Pi.exe', 'resources/runtime/node/node.exe', 'resources/backend/node_modules/@earendil-works/pi-ai/dist/index.js', 'resources/backend/node_modules/@earendil-works/pi-agent-core/dist/index.js')) {
             if (!(Test-Path (Join-Path $installed $file))) { throw "Installed artifact missing: $file" }
           }
           "CI_INSTALL_ROOT=$installed" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
@@ -52,8 +52,8 @@ jobs:
             sha256 = (Get-FileHash $installers[0].FullName -Algorithm SHA256).Hash.ToLowerInvariant()
             installed = $installed
           } | ConvertTo-Json | Set-Content (Join-Path $acceptance 'installation.json') -Encoding utf8
-          Get-CimInstance Win32_Process -Filter "Name='Second Mind.exe'" | Where-Object {
-            $_.ExecutablePath -eq (Join-Path $installed 'Second Mind.exe')
+          Get-CimInstance Win32_Process -Filter "Name='Second Mind Pi.exe'" | Where-Object {
+            $_.ExecutablePath -eq (Join-Path $installed 'Second Mind Pi.exe')
           } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }
       - name: Native ACL, filesystem and process-tree checks on the installed artifact
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
@@ -76,10 +76,22 @@ jobs:
         timeout-minutes: 5
         shell: pwsh
         run: |
-          $env:SECOND_MIND_PACKAGED_EXECUTABLE = Join-Path $env:CI_INSTALL_ROOT 'Second Mind.exe'
+          $env:SECOND_MIND_PACKAGED_EXECUTABLE = Join-Path $env:CI_INSTALL_ROOT 'Second Mind Pi.exe'
           $node = Join-Path $env:CI_INSTALL_ROOT 'resources/runtime/node/node.exe'
           & $node --import ./test/test-environment.mjs --test --test-reporter=spec --test-timeout=150000 test/desktop-shell.electron.mjs 2>&1 | Tee-Object "$env:CI_ACCEPTANCE_ROOT/electron.log"
           if ($LASTEXITCODE -ne 0) { throw 'Packaged Electron GUI acceptance failed' }
+      - name: Install Claude v0.2.1 and start both installed applications
+        shell: pwsh
+        run: |
+          $baseline = node scripts/fetch-claude-installer.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Original installer verification failed' }
+          $oldRoot = Join-Path $env:RUNNER_TEMP 'claude-desktop'
+          $install = Start-Process $baseline -ArgumentList @('/S', "/D=$oldRoot") -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw 'Claude v0.2.1 install failed' }
+          $exe = Join-Path $oldRoot 'Second Mind.exe'
+          Get-Process -Name 'Second Mind' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | Stop-Process -Force
+          node scripts/desktop-coexistence.mjs pair "$env:RUNNER_TEMP/two-desktop-editions" $exe "$env:CI_INSTALL_ROOT/Second Mind Pi.exe"
+          exit $LASTEXITCODE
       - name: Upgrade and uninstall preserve user state and external Vault
         if: ${{ !cancelled() && steps.install.outcome == 'success' }}
         timeout-minutes: 8
@@ -88,7 +100,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $installer = (Get-ChildItem dist/windows/*-setup.exe | Select-Object -First 1).FullName
           $token = [Guid]::NewGuid().ToString('N')
-          $state = Join-Path $env:LOCALAPPDATA 'SecondMind'
+          $state = Join-Path $env:LOCALAPPDATA 'SecondMindPi'
           $vault = Join-Path $env:CI_ACCEPTANCE_ROOT 'Vault-preservation'
           New-Item -ItemType Directory -Force $state, $vault | Out-Null
           $stateSentinel = Join-Path $state "ci-preservation-$token.txt"
@@ -101,7 +113,7 @@ jobs:
           foreach ($file in @($stateSentinel, $vaultSentinel)) {
             if (!(Test-Path $file) -or (Get-Content $file -Raw).Trim() -ne $token) { throw "Upgrade changed preserved file: $file" }
           }
-          $uninstaller = Join-Path $env:CI_INSTALL_ROOT 'Uninstall Second Mind.exe'
+          $uninstaller = Join-Path $env:CI_INSTALL_ROOT 'Uninstall Second Mind Pi.exe'
           if (!(Test-Path $uninstaller)) { throw 'Upgrade did not install an uninstaller' }
           $testUninstaller = Join-Path $env:CI_ACCEPTANCE_ROOT 'uninstall-lifecycle-check.exe'
           Copy-Item $uninstaller $testUninstaller -Force
@@ -109,7 +121,7 @@ jobs:
           # actual uninstall completion rather than only spawning a temp copy.
           $process = Start-Process -FilePath $testUninstaller -ArgumentList "/S /currentuser _?=$env:CI_INSTALL_ROOT" -Wait -PassThru
           if ($process.ExitCode -ne 0) { throw "Uninstaller exited $($process.ExitCode)" }
-          if (Test-Path (Join-Path $env:CI_INSTALL_ROOT 'Second Mind.exe')) { throw 'Uninstaller left application executable' }
+          if (Test-Path (Join-Path $env:CI_INSTALL_ROOT 'Second Mind Pi.exe')) { throw 'Uninstaller left application executable' }
           foreach ($file in @($stateSentinel, $vaultSentinel)) {
             if (!(Test-Path $file) -or (Get-Content $file -Raw).Trim() -ne $token) { throw "Uninstall changed preserved file: $file" }
           }
@@ -121,6 +133,11 @@ jobs:
             externalVaultPreserved = $true
             uninstallerSha256 = (Get-FileHash $testUninstaller -Algorithm SHA256).Hash.ToLowerInvariant()
           } | ConvertTo-Json | Set-Content (Join-Path $env:CI_ACCEPTANCE_ROOT 'lifecycle.json') -Encoding utf8
+      - name: Start Claude after Pi uninstallation
+        shell: pwsh
+        run: |
+          node scripts/desktop-coexistence.mjs survivor "$env:RUNNER_TEMP/two-desktop-editions" "$env:RUNNER_TEMP/claude-desktop/Second Mind.exe"
+          exit $LASTEXITCODE
       - name: Upload acceptance evidence even on failure
         if: always()
         uses: actions/upload-artifact@v4
@@ -136,7 +153,7 @@ jobs:
           if-no-files-found: warn
       - uses: actions/upload-artifact@v4
         with:
-          name: SecondMind-windows-x64
+          name: SecondMindPi-windows-x64
           path: |
             dist/windows/*.exe
             dist/windows/SHA256SUMS.txt

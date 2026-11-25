@@ -10,7 +10,7 @@
 | Microsoft Visual C++ Runtime | 14.0 Desktop x64 AppX | [微软组件下载](https://learn.microsoft.com/en-us/troubleshoot/developer/visualstudio/cpp/libraries/c-runtime-packages-desktop-bridge)，原始 AppX 文件材料保留于 `runtime/vclibs` |
 | faster-whisper | 1.2.1 | [SYSTRAN/faster-whisper](https://github.com/SYSTRAN/faster-whisper)，MIT |
 | CTranslate2 | 4.8.1 | [OpenNMT/CTranslate2](https://github.com/OpenNMT/CTranslate2)，MIT 及随包运行库许可 |
-| PyAV | 18.1.0 | [PyAV](https://github.com/PyAV-Org/PyAV)，BSD，FFmpeg 库按其随包许可 |
+| PyAV | 18.1.1 | [PyAV](https://github.com/PyAV-Org/PyAV)，BSD，FFmpeg 库按其随包许可 |
 | huggingface-hub | 1.28.0 | [huggingface_hub](https://github.com/huggingface/huggingface_hub)，Apache-2.0 |
 | yt-dlp | 2026.8.19 | [yt-dlp](https://github.com/yt-dlp/yt-dlp)，Unlicense 及随包依赖许可 |
 | yt-dlp-ejs | 0.8.0 | [yt-dlp/ejs](https://github.com/yt-dlp/ejs)，Unlicense、MIT、ISC；使用内置 Node 处理网站 JavaScript challenge |

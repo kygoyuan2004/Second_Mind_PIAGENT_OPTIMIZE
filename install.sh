@@ -63,11 +63,11 @@ repo_root=$script_dir
 case "$(uname -s)" in
   Darwin*)
     host_os=darwin
-    default_state_root=${HOME:?HOME is required}/Library/Application\ Support/Second\ Mind
+    default_state_root=${HOME:?HOME is required}/Library/Application\ Support/Second\ Mind\ Pi
     ;;
   Linux*)
     host_os=linux
-    default_state_root=${XDG_CONFIG_HOME:-${HOME:?HOME is required}/.config}/second-mind
+    default_state_root=${XDG_CONFIG_HOME:-${HOME:?HOME is required}/.config}/second-mind-pi
     ;;
   *) die 'Use install.ps1 on Windows, or run this script from Linux/macOS.' ;;
 esac
@@ -172,7 +172,7 @@ else
 fi
 
 instance_id=$(read_value "$state_root/current")
-[[ $instance_id =~ ^second-mind-[a-z0-9][a-z0-9-]{5,48}[a-z0-9]$ ]] \
+[[ $instance_id =~ ^second-mind-pi-[a-z0-9][a-z0-9-]{5,48}[a-z0-9]$ ]] \
   || die 'Installer returned an invalid instance identifier.'
 instance_root=$state_root/$instance_id
 operation_root=$instance_root/operation

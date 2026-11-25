@@ -39,7 +39,7 @@ cd Second_Mind_PIAGENT_OPTIMIZE
 ./install.sh update
 ```
 
-安装配置默认位于 `~/Library/Application Support/Second Mind`，每个实例有独立 Compose project、配置目录和数据卷。不要将这里的凭据或备份提交到 Git。
+安装配置默认位于 `~/Library/Application Support/Second Mind Pi`，每个实例有独立 Compose project、配置目录和数据卷。不要将这里的凭据或备份提交到 Git。
 
 标准镜像在 Linux container 中运行，但没有内置可验证的 `bwrap` 与 `pdftotext` 组合，因此网页 PDF 读取默认关闭。`doctor` 检查 Docker、目录、数据卷、端口、健康状态与媒体依赖。图片和 PDF 附件通过支持该能力的模型与 Agent SDK 读取；语音和视频依赖容器中的 Python、FFmpeg 和语音模型，首次使用需要下载模型。
 

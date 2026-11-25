@@ -11,7 +11,7 @@
 - 当前用户可以访问 Docker daemon
 - 常规 rootful Docker Engine；rootless Docker 和 SELinux enforcing 主机需要管理员自行处理 UID 映射、卷权限与 bind-mount relabel，当前快速安装器不自动配置
 
-安装器不会停止现有进程或容器。默认只在 `127.0.0.1` 发布端口；若 `8787` 已占用，会要求选择其他端口。
+安装器不会停止现有进程或容器。默认只在 `127.0.0.1` 发布端口；若 `8788` 已占用，会要求选择其他端口。
 
 ## 三条命令
 
@@ -25,7 +25,7 @@ cd Second_Mind_PIAGENT_OPTIMIZE
 
 1. 单个 Vault，或包含多个 Vault 的父目录；
 2. 至少 12 个字符的管理员密码；
-3. 本机端口，直接回车使用 `8787`。
+3. 本机端口，直接回车使用 `8788`。
 
 安装器优先拉取 `ghcr.io/kygoyuan2004/second_mind_piagent_optimize:latest` 的对应架构镜像；无法拉取时会从当前检出的源码构建。密码与随机会话密钥保存在安装器的私有配置目录，不写入仓库或 Compose 环境变量。
 

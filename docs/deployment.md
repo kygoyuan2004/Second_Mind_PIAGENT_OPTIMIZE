@@ -26,7 +26,7 @@ The interactive installer asks for:
 
 1. one Vault or a parent containing immediate-child Vaults;
 2. an administrator password of at least 12 characters;
-3. a loopback port, default `8787`.
+3. a loopback port, default `8788`.
 
 It validates Docker/Compose, path accessibility, separation from private state, runtime-volume ownership, port availability, and readiness. It never stops the process or container that already owns a port.
 
@@ -42,25 +42,25 @@ The Linux quick path assumes a conventional rootful Docker Engine. The installer
 
 ## Installer state and multiple instances
 
-Each installation receives a random `second-mind-*` instance ID, its own Compose project, named runtime-data volume, secret files, generated `.env`, Compose overlay, and backup directory. Defaults are:
+Each installation receives a random `second-mind-pi-*` instance ID, its own Compose project, named runtime-data volume, secret files, generated `.env`, Compose overlay, and backup directory. Defaults are:
 
 | Host | Private configuration root |
 |---|---|
-| Linux | `$XDG_CONFIG_HOME/second-mind`, or `~/.config/second-mind` |
-| macOS | `~/Library/Application Support/Second Mind` |
-| Windows | `%LOCALAPPDATA%\Second Mind` |
+| Linux | `$XDG_CONFIG_HOME/second-mind-pi`, or `~/.config/second-mind-pi` |
+| macOS | `~/Library/Application Support/Second Mind Pi` |
+| Windows | `%LOCALAPPDATA%\Second Mind Pi` |
 
 Set `SECOND_MIND_CONFIG_HOME` before the first command to select another dedicated directory. It must not be a filesystem root, user-profile root, Git checkout, Vault, or a directory containing/contained by the Vault. The installer writes a marker and rejects a nonempty unrelated directory.
 
 Unix permissions are restricted where supported. The PowerShell wrapper replaces inherited ACL entries with access for the current user, Local System, and local Administrators. Docker administrators and host administrators can still read volumes and secrets.
 
-Running `init` again reuses the selected instance and refuses to replace its Vault or administrator secret. Use `--new-instance` to create another isolated instance. Use `--instance second-mind-ID` on an operations command to select an existing instance explicitly.
+Running `init` again reuses the selected instance and refuses to replace its Vault or administrator secret. Use `--new-instance` to create another isolated instance. Use `--instance second-mind-pi-ID` on an operations command to select an existing instance explicitly.
 
 For automation, provide the password to the host wrapper through the process environment rather than a command-line argument:
 
 ```bash
 SECOND_MIND_ADMIN_PASSWORD="$INJECTED_SECRET" \
-  ./install.sh init --non-interactive --vault /path/to/vault-parent --port 8787
+  ./install.sh init --non-interactive --vault /path/to/vault-parent --port 8788
 ```
 
 The wrapper pipes that value to the short-lived initializer over standard input; it is not added to Docker arguments or the container environment. This example shows the interface, not a recommendation to place a real password in shell history, a checked-in file, or a shared host environment. Prefer a CI secret store or interactive prompt.

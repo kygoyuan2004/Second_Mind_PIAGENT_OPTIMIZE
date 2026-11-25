@@ -1,0 +1,74 @@
+name: Native macOS disk images
+on:
+  workflow_call:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  native:
+    name: macOS ${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { runner: macos-15, arch: arm64, machine: arm64 }
+          - { runner: macos-15-intel, arch: x64, machine: x86_64 }
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 115
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.22.0'
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify native runner
+        run: test "$(uname -m)" = '${{ matrix.machine }}' && test "$(node -p process.arch)" = '${{ matrix.arch }}'
+      - run: npm ci
+      - run: npm run desktop:build:mac
+      - name: Mount the DMG, verify its contents and exercise the installed app
+        env:
+          ARCH: ${{ matrix.arch }}
+          SECOND_MIND_TEST_MAC_KEYCHAIN: '1'
+        run: |
+          set -euo pipefail
+          dir="$PWD/dist/macos/$ARCH"
+          name="SecondMindPi-$(node -p 'require("./package.json").version')-macos-$ARCH.dmg"
+          test -s "$dir/$name"
+          work=$(mktemp -d)
+          mount="$work/disk"
+          mkdir "$mount"
+          keychain="$work/test.keychain-db"
+          password=$(uuidgen)
+          previous=$(security default-keychain -d user | tr -d '" ' )
+          trap 'security default-keychain -d user -s "$previous"; security delete-keychain "$keychain" || true; hdiutil detach "$mount" || true' EXIT
+          security create-keychain -p "$password" "$keychain"
+          security default-keychain -d user -s "$keychain"
+          security list-keychains -d user -s "$keychain" "$previous"
+          security unlock-keychain -p "$password" "$keychain"
+          hdiutil attach -readonly -nobrowse -mountpoint "$mount" "$dir/$name"
+          app="$work/Applications/Second Mind Pi.app"
+          mkdir -p "$work/Applications"
+          ditto "$mount/Second Mind Pi.app" "$app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign -dv --verbose=2 "$app" 2>&1 | grep -F 'Signature=adhoc'
+          test "$(/usr/libexec/PlistBuddy -c 'Print CFBundleIdentifier' "$app/Contents/Info.plist")" = io.secondmind.pi.desktop
+          runtime="$app/Contents/Resources/runtime/bin"
+          "$runtime/node" --version
+          "$runtime/python" -c 'import av, ctranslate2, faster_whisper, onnxruntime, yt_dlp'
+          "$runtime/ffmpeg" -hide_banner -loglevel error -f lavfi -i sine=duration=0.1 "$work/test.wav"
+          "$runtime/ffprobe" -v error -show_streams "$work/test.wav" | grep -F codec_type=audio
+          export SECOND_MIND_PACKAGED_EXECUTABLE="$app/Contents/MacOS/Second Mind Pi"
+          node --test --test-timeout=180000 test/desktop-shell.electron.mjs
+          (cd "$dir" && shasum -a 256 "$name" > SHA256SUMS.txt && shasum -a 256 -c SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: SecondMindPi-macos-${{ matrix.arch }}
+          path: |
+            dist/macos/${{ matrix.arch }}/*.dmg
+            dist/macos/${{ matrix.arch }}/SHA256SUMS.txt
+          if-no-files-found: error

@@ -15,11 +15,11 @@ test('Linux NSIS adapter only extracts this build intermediate and restores upst
   try {
     restore = useNativeNsisUninstallerExtraction(directory, { extract: async (...args) => { extracted.push(args); } });
     const vm = Object.create(WineVmManager.prototype);
-    const expected = path.join(directory, 'SecondMind-0.1.0-windows-x64-setup.exe');
+    const expected = path.join(directory, 'SecondMindPi-0.1.0-windows-x64-setup.exe');
     const options = { env: { __COMPAT_LAYER: 'RunAsInvoker' } };
     await vm.exec(expected, [], options);
     assert.deepEqual(extracted, [[expected, expected.replace(/exe$/, '__uninstaller.exe')]]);
-    await vm.exec(path.join(directory, '..', 'SecondMind-0.1.0-windows-x64-setup.exe'), [], options);
+    await vm.exec(path.join(directory, '..', 'SecondMindPi-0.1.0-windows-x64-setup.exe'), [], options);
     await vm.exec(expected, ['--run'], options);
     await vm.exec(expected, [], {});
     await vm.exec(path.join(directory, 'different.exe'), [], options);

@@ -8,6 +8,7 @@ import http from 'node:http';
 import { fileURLToPath } from 'node:url';
 import { _electron } from 'playwright';
 import { expect } from '@playwright/test';
+import { verifyPackagedQuestion } from './support/packaged-qa.mjs';
 
 const appRoot = fileURLToPath(new URL('..', import.meta.url));
 const packagedExecutable = process.env.SECOND_MIND_PACKAGED_EXECUTABLE;
@@ -64,7 +65,10 @@ test('Electron shell runs the real local backend, isolates remote connections, a
   page.on('pageerror', (error) => errors.push(error.message));
   await application.evaluate(async ({ dialog, safeStorage }, { selectedPath, useSystemKeyring }) => {
     dialog.showOpenDialog = async () => ({ canceled: false, filePaths: [selectedPath] });
-    if (useSystemKeyring) {
+    if (process.platform === 'darwin' && process.env.SECOND_MIND_TEST_MAC_KEYCHAIN === '1') {
+      const sample = 'local-keychain-' + process.pid;
+      if (!safeStorage.isEncryptionAvailable() || safeStorage.decryptString(safeStorage.encryptString(sample)) !== sample) throw new Error('Keychain credential round trip failed');
+    } else if (useSystemKeyring) {
       if (!safeStorage.isEncryptionAvailable() || safeStorage.getSelectedStorageBackend() !== 'gnome_libsecret') {
         throw new Error('The isolated Secret Service keyring is unavailable');
       }
@@ -123,6 +127,7 @@ test('Electron shell runs the real local backend, isolates remote connections, a
 
   const selectedKnowledgeBase = await localPage.locator('#knowledge-base-select').inputValue();
   assert.ok(selectedKnowledgeBase && selectedKnowledgeBase !== 'default', 'desktop generated registry ID is selected');
+  if (packagedExecutable) await verifyPackagedQuestion(t, localPage, selectedKnowledgeBase);
   const adminLink = localPage.locator('.knowledge-drive-back');
   await expect(adminLink).toHaveAttribute('href', `/admin-config.html?knowledgeBaseId=${encodeURIComponent(selectedKnowledgeBase)}`);
   await adminLink.click();

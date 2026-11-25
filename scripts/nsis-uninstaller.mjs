@@ -21,7 +21,7 @@ export function useNativeNsisUninstallerExtraction(outputDirectory, { extract = 
     const relative = path.relative(outputRoot, installer);
     if (Array.isArray(args) && args.length === 0 && options?.env?.__COMPAT_LAYER === 'RunAsInvoker'
       && relative && !relative.startsWith('..') && !path.isAbsolute(relative)
-      && /^SecondMind-.*-windows-x64-setup\.exe$/.test(path.basename(installer))) {
+      && /^SecondMindPi-.*-windows-x64-setup\.exe$/.test(path.basename(installer))) {
       const uninstaller = path.join(path.dirname(installer), `${path.basename(installer, 'exe')}__uninstaller.exe`);
       await extract(installer, uninstaller);
       console.log('Extracted NSIS uninstaller with complete resources and verified compiler CRC');
