@@ -76,6 +76,9 @@ def main():
                     scripted = handle.read(2) == b"#!"
                 if scripted:
                     script.unlink()
+        for script in (runtime / "python/bin").iterdir():
+            if script.is_symlink() and not script.exists():
+                script.unlink()
         ff = LOCK["ffmpeg"]
         name = f"ffmpeg-{ff['version']}"
         archive(f"https://ffmpeg.org/releases/{name}.tar.xz", ff["sha256"], tmp, cache)

@@ -1,0 +1,63 @@
+name: Publish reviewed Pi draft
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  select:
+    if: github.ref == 'refs/heads/main' && github.actor == github.repository_owner
+    runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.select.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: select
+        name: Select only the exact, previously tagged commit promoted by the owner
+        run: |
+          set -euo pipefail
+          tag=v$(node -p 'require("./package.json").version')
+          if git show-ref --verify --quiet "refs/tags/$tag" && [[ "$(git rev-list -n 1 "$tag")" = "$GITHUB_SHA" ]]; then
+            echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          fi
+  publish:
+    needs: select
+    if: needs.select.outputs.tag != ''
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Verify the successful tag run, draft files and checksums before publication
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.select.outputs.tag }}
+        run: |
+          set -euo pipefail
+          status=$(gh release view "$TAG" --json isDraft --jq '.isDraft')
+          if [[ "$status" = false ]]; then exit 0; fi
+          gh api -X GET "repos/$GITHUB_REPOSITORY/actions/workflows/release.yml/runs" -f event=push -f head_sha="$GITHUB_SHA" |
+            jq -e --arg tag "$TAG" --arg sha "$GITHUB_SHA" 'any(.workflow_runs[]; .head_branch==$tag and .head_sha==$sha and .conclusion=="success")'
+          folder=$(mktemp -d)
+          gh release download "$TAG" --dir "$folder"
+          node --input-type=module - "$folder" "${TAG#v}" <<'JS'
+          import assert from 'node:assert/strict';
+          import { readdirSync, readFileSync } from 'node:fs';
+          import path from 'node:path';
+          const [dir, version] = process.argv.slice(2);
+          const expected = ['windows-x64-setup.exe','linux-x86_64.AppImage','linux-amd64.deb','macos-arm64.dmg','macos-x64.dmg']
+            .map(name => 'SecondMindPi-' + version + '-' + name).sort();
+          assert.deepEqual(readdirSync(dir).sort(), [...expected, 'SHA256SUMS.txt'].sort());
+          const entries = readFileSync(path.join(dir,'SHA256SUMS.txt'),'utf8').trim().split(/\r?\n/)
+            .map(line => /^([a-f0-9]{64})  ([\w.-]+)$/.exec(line)?.[2]);
+          assert.deepEqual(entries.sort(), expected);
+          JS
+          (cd "$folder" && sha256sum --check --strict SHA256SUMS.txt)
+          gh release edit "$TAG" --draft=false --latest

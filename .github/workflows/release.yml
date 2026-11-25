@@ -48,6 +48,12 @@ jobs:
       contents: read
       packages: write
     uses: ./.github/workflows/container.yml
+  public-registry:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: image
+    uses: ./.github/workflows/verify-public-image.yml
+    with:
+      version: ${{ github.ref_name }}
   draft:
     if: startsWith(github.ref, 'refs/tags/v')
     needs: [assemble, image]

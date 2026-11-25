@@ -28,7 +28,8 @@ b="$XDG_CONFIG_HOME/second-mind-pi"
 a_id=$(cat "$a/current"); b_id=$(cat "$b/current")
 av=$(jq -r .dataVolume "$a/$a_id/instance.json")
 bv=$(jq -r .dataVolume "$b/$b_id/instance.json")
-test "$av" != "$bv" && test "$a_id" != "$b_id"
+test "$av" != "$bv"
+test "$a_id" != "$b_id"
 test "$(jq -r .port "$a/$a_id/instance.json")" = 8787
 test "$(jq -r .port "$b/$b_id/instance.json")" = 8788
 cleanup() {

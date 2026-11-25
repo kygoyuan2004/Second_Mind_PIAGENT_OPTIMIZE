@@ -1,4 +1,4 @@
-# Versions installed in the read-only original media environment.
+# Versions used in Pi desktop and container media runtimes.
 faster-whisper==1.2.1
 av==18.1.1
 ctranslate2==4.8.1

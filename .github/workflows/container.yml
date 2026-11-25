@@ -17,6 +17,8 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Check the release tag before uploading any image
+        run: node -e 'if (process.env.GITHUB_REF_TYPE !== "tag" || process.env.GITHUB_REF_NAME !== "v" + require("./package.json").version) process.exit(1)'
       - name: Enable emulated architectures
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - name: Configure Buildx
