@@ -145,7 +145,7 @@ jobs:
           exit $LASTEXITCODE
       - name: Upload acceptance evidence even on failure
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: SecondMind-windows-server-2022-acceptance
           path: |
@@ -156,7 +156,7 @@ jobs:
             ${{ runner.temp }}/SecondMind-artifact-acceptance/**/report.txt
             build/desktop-*-smoke.png
           if-no-files-found: warn
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SecondMindPi-windows-x64
           path: |
