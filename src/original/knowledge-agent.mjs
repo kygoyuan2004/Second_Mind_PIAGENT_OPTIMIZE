@@ -1003,7 +1003,7 @@ export class KnowledgeAgentManager {
     } finally {
       clearTimeout(timeout);
       task.finalizing = true;
-      const status = task.status === 'running' ? outcome : task.status;
+      let status = task.status === 'running' ? outcome : task.status;
       const result = task.finalResult;
       const usage = result || task.modelUsage ? {
         turns: result?.num_turns,
@@ -1011,12 +1011,13 @@ export class KnowledgeAgentManager {
         totalCostUsd: result?.total_cost_usd,
         ...task.modelUsage,
       } : null;
-      const message = task.cancelReason || (status === 'completed' ? '任务已完成。' : '任务未能完成。');
+      let message = task.cancelReason || (status === 'completed' ? '任务已完成。' : '任务未能完成。');
       const savedAssistant = (task.assistantText.trim() || (status === 'completed' ? '' : message))
         .slice(0, MAX_MESSAGE_LENGTH);
       const evidence = citedEvidence(task, savedAssistant);
+      let assistantMessage;
       if (savedAssistant) {
-        conversation.messages.push({
+        assistantMessage = {
           id: crypto.randomUUID(),
           role: 'assistant',
           text: savedAssistant,
@@ -1026,11 +1027,22 @@ export class KnowledgeAgentManager {
           draftId: task.draftId,
           createdAt: new Date().toISOString(),
           usage,
-        });
+        };
+        conversation.messages.push(assistantMessage);
       }
       conversation.messages = conversation.messages.slice(-MAX_MESSAGES);
       conversation.updatedAt = new Date().toISOString();
-      this.persistConversations();
+      try {
+        await this.persistConversations();
+      } catch {
+        const saveError = '本轮对话未能保存到历史记录。';
+        if (status === 'completed') {
+          status = 'failed';
+          message = saveError;
+          if (assistantMessage) assistantMessage.status = status;
+        }
+        this.emit(task, 'warning', { code: 'CONVERSATION_SAVE_FAILED', message: saveError });
+      }
       task.attachments = task.attachments.map(({ name, type, kind, bytes }) => ({ name, type, kind, bytes }));
       task.videoFrames = task.videoFrames.map(({ name, type, bytes, timestamp }) => ({ name, type, bytes, timestamp }));
       await this.store.audit({

@@ -43,6 +43,38 @@ test('a completed task can immediately accept a follow-up when the final audit i
   await waitFor(() => manager.tasks.get(followUp.taskId)?.status === 'completed');
 });
 
+test('a failed final history write is reported before the task releases its slot', {timeout: 15_000}, async (t) => {
+  const { manager, call } = await sdkApplication(t);
+  const persist = manager.persistConversations.bind(manager);
+  const writing = Promise.withResolvers();
+  const disk = Promise.withResolvers();
+  manager.persistConversations = () => {
+    const conversation = [...manager.conversations.values()][0];
+    if (conversation?.messages.at(-1)?.role !== 'assistant') return persist();
+    manager.persistConversations = persist;
+    writing.resolve();
+    return disk.promise;
+  };
+  const response = await call('/api/knowledge/tasks', {
+    method: 'POST', body: JSON.stringify({ kind: 'qa', model: 'configured', prompt: 'Read Evidence.md' }),
+  });
+  assert.ok(response.ok);
+  const { taskId, conversationId } = await response.json();
+  await writing.promise;
+  const task = manager.tasks.get(taskId);
+  try {
+    assert.equal(task.status, 'running');
+    assert.equal(manager.taskRegistry.get(task.userId)?.taskId, taskId);
+  } finally {
+    disk.reject(new Error('fixture history write failed'));
+  }
+  await waitFor(() => task.events.some(event => event.type === 'done'));
+  assert.equal(task.status, 'failed');
+  assert.equal(manager.conversations.get(conversationId).messages.at(-1).status, 'failed');
+  assert.ok(task.events.some(event => event.type === 'warning' && event.data.code === 'CONVERSATION_SAVE_FAILED'));
+  assert.equal(manager.taskRegistry.get(task.userId), null);
+});
+
 test('original ten-minute deadline aborts the real SDK transport and releases the task slot', {timeout: 30_000}, async t => {
   let upstreamStarted = false, upstreamAborted = false;
   const context = await sdkApplication(t, {fetch: async (_url, init) => {
