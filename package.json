@@ -45,7 +45,7 @@
   "devDependencies": {
     "@playwright/test": "1.63.0",
     "electron": "44.11.5",
-    "electron-builder": "26.15.3",
+    "electron-builder": "26.18.0",
     "html-validate": "11.13.0"
   },
   "main": "desktop/main.mjs",
