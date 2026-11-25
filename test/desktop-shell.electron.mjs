@@ -113,7 +113,8 @@ test('Electron shell runs the real local backend, isolates remote connections, a
   assert.equal(await localPage.evaluate(() => document.cookie.includes('vaultmind_session')), false);
   await localPage.evaluate(async () => { await Promise.all(document.getAnimations().filter((animation) => Number.isFinite(animation.effect?.getComputedTiming().endTime)).map((animation) => animation.finished.catch(() => {}))); });
   await localPage.screenshot({ path: path.join(build, 'desktop-local-content-smoke.png'), animations: 'disabled' });
-  const composite = await application.evaluate(async ({ desktopCapturer }) => {
+  // macOS screen recording requires a separate interactive TCC grant. The app view above is captured directly.
+  const composite = process.platform === 'darwin' ? null : await application.evaluate(async ({ desktopCapturer }) => {
     const isolatedDisplay = process.platform === 'linux';
     const sources = await desktopCapturer.getSources({ types: [isolatedDisplay ? 'screen' : 'window'], thumbnailSize: { width: 1440, height: 1000 } });
     const source = isolatedDisplay ? sources[0] : sources.find((item) => item.name.startsWith('Second Mind'));

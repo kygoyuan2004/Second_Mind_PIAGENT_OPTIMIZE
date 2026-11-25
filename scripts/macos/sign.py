@@ -2,6 +2,7 @@
 from pathlib import Path
 import os
 import platform
+import plistlib
 import re
 import stat
 import subprocess
@@ -72,20 +73,43 @@ def sign(path, executable_bundle=False):
 
 if not (RUNTIME / "bin/node").is_file():
     raise SystemExit("Packaged Darwin runtime is missing")
-for directory, folders, files in os.walk(APP, topdown=False):
+# codesign treats a bundle's declared executable as the entire bundle. Signing
+# Contents/MacOS first can therefore try to seal unsigned sibling frameworks.
+bundles = []
+executables = set()
+native_files = []
+for directory, folders, files in os.walk(APP):
     folder = Path(directory)
-    for name in files:
+    if folder.suffix in (".framework", ".app", ".xpc"):
+        if folder.suffix == ".framework":
+            contents = folder / "Versions/Current" if (folder / "Versions/Current").exists() else folder
+            info = contents / "Resources/Info.plist"
+            binaries = contents
+        else:
+            info = folder / "Contents/Info.plist"
+            binaries = folder / "Contents/MacOS"
+        with info.open("rb") as stream:
+            name = plistlib.load(stream)["CFBundleExecutable"]
+        executables.add((binaries / name).resolve(strict=True))
+        bundles.append(folder)
+    for name in [*folders, *files]:
         path = folder / name
-        if path.is_symlink() or not path.is_file():
-            continue
-        with path.open("rb") as stream:
-            native = stream.read(4) in MACH
-        if native:
-            if path.is_relative_to(RUNTIME):
-                audit(path)
-            sign(path)
-    if folder.suffix == ".framework":
-        sign(folder)
-    elif folder.suffix in (".app", ".xpc"):
-        sign(folder, executable_bundle=True)
+        if path.is_symlink():
+            target = path.resolve(strict=True)
+            if path.readlink().is_absolute() or not target.is_relative_to(APP):
+                raise ValueError(f"Non-portable link in {path.relative_to(APP)}")
+        elif path.is_file():
+            with path.open("rb") as stream:
+                if stream.read(4) in MACH:
+                    native_files.append(path)
+
+for path in native_files:
+    if path.is_relative_to(RUNTIME):
+        audit(path)
+    if path not in executables:
+        sign(path)
+
+# All loose code is signed before any nested bundle. Seal parents last.
+for bundle in sorted(bundles, key=lambda entry: len(entry.parts), reverse=True):
+    sign(bundle, executable_bundle=bundle.suffix in (".app", ".xpc"))
 subprocess.run(["codesign", "--verify", "--deep", "--strict", "--verbose=2", str(APP)], check=True)

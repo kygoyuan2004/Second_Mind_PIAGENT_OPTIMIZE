@@ -81,13 +81,18 @@ jobs:
           & $node --import ./test/test-environment.mjs --test --test-reporter=spec --test-timeout=150000 test/desktop-shell.electron.mjs 2>&1 | Tee-Object "$env:CI_ACCEPTANCE_ROOT/electron.log"
           if ($LASTEXITCODE -ne 0) { throw 'Packaged Electron GUI acceptance failed' }
       - name: Install Claude v0.2.1 and start both installed applications
+        timeout-minutes: 9
         shell: pwsh
         run: |
+          $ErrorActionPreference = 'Stop'
+          Write-Host 'Downloading and verifying the original v0.2.1 installer'
           $baseline = node scripts/fetch-claude-installer.mjs
           if ($LASTEXITCODE -ne 0) { throw 'Original installer verification failed' }
           $oldRoot = Join-Path $env:RUNNER_TEMP 'claude-desktop'
-          $install = Start-Process $baseline -ArgumentList @('/S', "/D=$oldRoot") -Wait -PassThru
-          if ($install.ExitCode -ne 0) { throw 'Claude v0.2.1 install failed' }
+          Write-Host 'Installing the original edition in its separate runner directory'
+          $install = Start-Process $baseline -ArgumentList @('/S', "/D=$oldRoot") -PassThru
+          if (!$install.WaitForExit(180000)) { throw 'Claude v0.2.1 installer exceeded three minutes' }
+          if ($install.ExitCode -ne 0) { throw "Claude v0.2.1 installer exited $($install.ExitCode)" }
           $exe = Join-Path $oldRoot 'Second Mind.exe'
           Get-Process -Name 'Second Mind' -ErrorAction SilentlyContinue | Where-Object { $_.Path -eq $exe } | Stop-Process -Force
           node scripts/desktop-coexistence.mjs pair "$env:RUNNER_TEMP/two-desktop-editions" $exe "$env:CI_INSTALL_ROOT/Second Mind Pi.exe"
