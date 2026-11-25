@@ -46,3 +46,9 @@ npm run site:check
 ## 公开演示库试跑
 
 按首页步骤从新的检出目录复制三篇公开笔记，实际启动网页，在管理页添加、验证并保存本机 OpenAI Chat Completions 连接。模拟模型依次请求检索和枚举、按行读取、核验引文，再返回回答。浏览器显示 4 次模型调用及模拟服务报告的用量，点击引用后定位到 `Learning/RAG.md` 第 7 行。[首页截图](docs/assets/second-mind-pi-qa.png)
+
+## 首次公开 CI 的修正
+
+跨平台测试复现了连续追问时的任务名额竞态。现在任务完成审计和清理、释放名额后，才对外公布完成状态。新增回归用例主动延迟审计，验证上一轮完成后同一对话可以立即追问。Windows 测试启动器使用独立的短临时路径，避免较长的仓库名让 Git 的测试仓库路径超出系统限制。[生命周期回归](test/sdk-lifecycle.test.mjs) · [本仓库 CI](https://github.com/kygoyuan2004/Second_Mind_PIAGENT_OPTIMIZE/actions/workflows/ci.yml)
+
+修正后在 Linux 上复跑 440 项测试，436 通过、0 失败、4 项条件跳过。11 项补充部署检查、源码安全扫描、站点检查及公开演示库问答也已通过。

@@ -32,7 +32,9 @@ foreach ($argument in $nodeArguments) {
     }
 }
 
-$tokenTemporaryRoot = Join-Path $resolvedProject ('build/test-token-' + [Guid]::NewGuid().ToString('N'))
+$tempParent = if ($env:RUNNER_TEMP) { $env:RUNNER_TEMP } else { [IO.Path]::GetTempPath() }
+# Use the isolated root recognized by run-tests.mjs so Git fixtures stay short.
+$tokenTemporaryRoot = Join-Path $tempParent ('sm-piagent-test-' + [Guid]::NewGuid().ToString('D'))
 $tokenPreviousTemp = $env:TEMP
 $tokenPreviousTmp = $env:TMP
 New-Item -ItemType Directory -Path $tokenTemporaryRoot -Force | Out-Null

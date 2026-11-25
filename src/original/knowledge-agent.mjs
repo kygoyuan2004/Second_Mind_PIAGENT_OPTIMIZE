@@ -769,22 +769,25 @@ export class KnowledgeAgentManager {
 
   async runInventoryTask(task, conversation, record) {
     task.status='running';
+    let outcome;
     this.emit(task,'state',{status:task.status,conversationId:conversation.id});
     try {
       await this.inventories.scan(record,{signal:task.abortController.signal,onProgress:(page)=>{
         this.emit(task,'inventory',{inventoryId:record.id,conversationId:conversation.id,status:page.status,discovered:page.discovered,processed:page.processed});
       }});
-      task.status=record.status==='cancelled'?'cancelled':record.status==='failed'?'failed':'completed';
+      outcome=record.status==='cancelled'?'cancelled':record.status==='failed'?'failed':'completed';
       task.assistantText=record.status==='completed'?'文件清单扫描完成。':'文件清单尚不完整，请查看缺口或重新扫描。';
     } catch {
-      task.status='failed'; task.assistantText='清单状态保存失败，请重新扫描。';
+      outcome='failed'; task.assistantText='清单状态保存失败，请重新扫描。';
       this.emit(task,'task_error',{message:task.assistantText});
     } finally {
+      task.finalizing = true;
       const message=conversation.messages.find((m)=>m.inventoryId===record.id);
       if(message) { message.text=task.assistantText; message.status=record.status; }
       conversation.updatedAt=new Date(this.now()).toISOString();
       await this.persistConversations().catch(()=>{});
       this.taskRegistry.release(task.userId,task.id);
+      task.status=outcome;
       this.emit(task,'done',{status:task.status,message:task.assistantText,conversationId:conversation.id,inventoryId:record.id});
       await this.store.audit({action:'inventory_finished',userId:task.userId,conversationId:conversation.id,inventoryId:record.id,status:record.status,matched:record.entries.length}).catch(()=>{});
     }
@@ -832,13 +835,14 @@ export class KnowledgeAgentManager {
 
   async runTask(task, conversation) {
     task.status = 'running';
+    let outcome = 'completed';
     task.executionStartedAt = Date.now();
     this.emit(task, 'state', {
       status: 'running',
       message: task.kind === 'qa' ? '正在检索并核验知识库。' : '正在整理可保存的 Markdown 草稿。',
     });
     const timeout = setTimeout(() => {
-      if (TERMINAL_STATES.has(task.status)) return;
+      if (task.finalizing || TERMINAL_STATES.has(task.status)) return;
       task.status = 'timed_out';
       task.cancelReason = `任务超过${task.taskMode.label}模式的最大运行时间，已自动停止。`;
       task.abortController.abort();
@@ -975,8 +979,9 @@ export class KnowledgeAgentManager {
       task.abortController.signal.throwIfAborted();
       task.finalResult = await this.executeTask(task, conversation);
       task.abortController.signal.throwIfAborted();
-      task.status = 'completed';
-      if (task.status === 'completed' && task.kind !== 'qa') {
+      // Once the model has returned, a draft write may already be committing.
+      task.finalizing = true;
+      if (task.kind !== 'qa') {
         const draft = await this.store.createDraft({
           userId: task.userId,
           kind: task.kind,
@@ -992,11 +997,13 @@ export class KnowledgeAgentManager {
       }
     } catch (error) {
       if (!['cancelled', 'timed_out'].includes(task.status)) {
-        task.status = 'failed';
+        outcome = 'failed';
         this.emit(task, 'task_error', { code: error?.code, message: truncate(error?.message || '知识库任务失败。', 1400) });
       }
     } finally {
       clearTimeout(timeout);
+      task.finalizing = true;
+      const status = task.status === 'running' ? outcome : task.status;
       const result = task.finalResult;
       const usage = result || task.modelUsage ? {
         turns: result?.num_turns,
@@ -1004,8 +1011,8 @@ export class KnowledgeAgentManager {
         totalCostUsd: result?.total_cost_usd,
         ...task.modelUsage,
       } : null;
-      const message = task.cancelReason || (task.status === 'completed' ? '任务已完成。' : '任务未能完成。');
-      const savedAssistant = (task.assistantText.trim() || (task.status === 'completed' ? '' : message))
+      const message = task.cancelReason || (status === 'completed' ? '任务已完成。' : '任务未能完成。');
+      const savedAssistant = (task.assistantText.trim() || (status === 'completed' ? '' : message))
         .slice(0, MAX_MESSAGE_LENGTH);
       const evidence = citedEvidence(task, savedAssistant);
       if (savedAssistant) {
@@ -1015,7 +1022,7 @@ export class KnowledgeAgentManager {
           text: savedAssistant,
           evidence,
           taskId: task.id,
-          status: task.status,
+          status,
           draftId: task.draftId,
           createdAt: new Date().toISOString(),
           usage,
@@ -1026,17 +1033,9 @@ export class KnowledgeAgentManager {
       this.persistConversations();
       task.attachments = task.attachments.map(({ name, type, kind, bytes }) => ({ name, type, kind, bytes }));
       task.videoFrames = task.videoFrames.map(({ name, type, bytes, timestamp }) => ({ name, type, bytes, timestamp }));
-      this.emit(task, 'done', {
-        evidence,
-        status: task.status,
-        message,
-        conversationId: conversation.id,
-        draftId: task.draftId,
-        usage,
-      });
       await this.store.audit({
         action: 'task_finished', userId: task.userId, taskId: task.id,
-        conversationId: conversation.id, kind: task.kind, status: task.status,
+        conversationId: conversation.id, kind: task.kind, status,
         draftId: task.draftId,
         taskMode: task.taskMode.id,
         hybridSearchEnabled: task.hybridSearchEnabled,
@@ -1050,6 +1049,10 @@ export class KnowledgeAgentManager {
       }).catch(() => {});
       await task.videoPrepared?.cleanup?.().catch(() => {});
       this.taskRegistry.release(task.userId, task.id);
+      task.status = status;
+      this.emit(task, 'done', {
+        evidence, status, message, conversationId: conversation.id, draftId: task.draftId, usage,
+      });
     }
   }
 
@@ -1083,7 +1086,7 @@ export class KnowledgeAgentManager {
 
   cancel(userId, id) {
     const task = this.getTask(userId, id);
-    if (TERMINAL_STATES.has(task.status)) return { ok: true, status: task.status };
+    if (task.finalizing || TERMINAL_STATES.has(task.status)) return { ok: true, status: task.status };
     if(task.inventoryId){task.abortController.abort();this.emit(task,'state',{status:'running',message:'正在取消扫描并保存已观测结果。'});return {ok:true,status:'cancelling'};}
     task.status = 'cancelled';
     task.cancelReason = '用户停止了任务。';

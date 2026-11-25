@@ -5,6 +5,44 @@ import path from 'node:path';
 import crypto from 'node:crypto';
 import { sdkApplication, messageResponse, waitFor } from './sdk-test-helpers.mjs';
 
+test('a completed task can immediately accept a follow-up when the final audit is slow', {timeout: 15_000}, async (t) => {
+  const { manager, call } = await sdkApplication(t);
+  const audit = manager.store.audit.bind(manager.store);
+  const started = Promise.withResolvers();
+  const finish = Promise.withResolvers();
+  manager.store.audit = async (event) => {
+    if (event.action === 'task_finished') {
+      started.resolve();
+      await finish.promise;
+    }
+    return audit(event);
+  };
+  const ask = (conversationId) => call('/api/knowledge/tasks', {
+    method: 'POST',
+    body: JSON.stringify({ kind: 'qa', model: 'configured', prompt: 'Read Evidence.md', conversationId }),
+  });
+  const response = await ask();
+  assert.ok(response.ok);
+  const first = await response.json();
+  try {
+    await started.promise;
+    const task = manager.tasks.get(first.taskId);
+    assert.equal(task.status, 'running');
+    assert.equal(task.events.some(event => event.type === 'done'), false);
+    assert.equal(manager.taskRegistry.get(task.userId)?.taskId, task.id);
+  } finally {
+    finish.resolve();
+  }
+  const task = manager.tasks.get(first.taskId);
+  await waitFor(() => task.events.some(event => event.type === 'done'));
+  assert.equal(task.status, 'completed');
+  assert.equal(manager.taskRegistry.get(task.userId), null);
+  const second = await ask(first.conversationId);
+  assert.ok(second.ok);
+  const followUp = await second.json();
+  await waitFor(() => manager.tasks.get(followUp.taskId)?.status === 'completed');
+});
+
 test('original ten-minute deadline aborts the real SDK transport and releases the task slot', {timeout: 30_000}, async t => {
   let upstreamStarted = false, upstreamAborted = false;
   const context = await sdkApplication(t, {fetch: async (_url, init) => {
