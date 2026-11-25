@@ -13,18 +13,15 @@ module.exports = {
     '!desktop/**/*.test.*', '!node_modules/**',
   ],
   extraResources: [
-    { from: 'build/backend', to: 'backend', filter: ['**/*'] },
-    // electron-builder's directory filter always excludes a root node_modules.
-    // Make that directory its own source root so production dependencies survive.
-    { from: 'build/backend/node_modules', to: 'backend/node_modules', filter: ['**/*', '!.bin{,/**/*}', '!.package-lock.json'] },
+    { from: 'build/backend', to: 'backend', filter: ['**/*', '!node_modules/**', '!node_modules'] },
     { from: 'build/runtime/win-x64', to: 'runtime', filter: ['**/*'] },
     { from: 'docs/windows-user-guide.md', to: '使用说明.md' },
     { from: 'docs/windows-third-party.md', to: 'THIRD-PARTY-NOTICES.md' },
     { from: 'scripts/windows-runtime-lock.json', to: 'runtime-lock.json' },
   ],
   afterPack: async (context) => {
-    const { verifyPackagedBackend } = await import('./scripts/verify-packaged-backend.mjs');
-    const result = await verifyPackagedBackend({
+    const { copyPackagedDependencies } = await import('./scripts/verify-packaged-backend.mjs');
+    const result = await copyPackagedDependencies({
       stagedRoot: path.join(__dirname, 'build', 'backend'),
       packagedRoot: path.join(context.appOutDir, 'resources', 'backend'),
     });

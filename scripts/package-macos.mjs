@@ -5,7 +5,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Arch, Platform, build } from 'electron-builder';
-import { verifyPackagedBackend } from './verify-packaged-backend.mjs';
+import { copyPackagedDependencies } from './verify-packaged-backend.mjs';
 
 const root = fileURLToPath(new URL('../', import.meta.url));
 const arch = process.arch;
@@ -50,14 +50,13 @@ await build({
     dmg: { sign: false, writeUpdateInfo: false },
     extraResources: [
       { from: backend, to: 'backend', filter: ['**/*', '!node_modules/**', '!node_modules'] },
-      { from: path.join(backend, 'node_modules'), to: 'backend/node_modules', filter: ['**/*', '!.bin{,/**/*}', '!.package-lock.json'] },
       { from: 'docs/macos-desktop.md', to: 'macOS-README.md' },
     ],
     afterPack: async ({ appOutDir }) => {
       const app = path.join(appOutDir, pkg.productName + '.app');
       const resources = path.join(app, 'Contents/Resources');
       run('/usr/bin/ditto', [path.join(stage, 'runtime'), path.join(resources, 'runtime')]);
-      await verifyPackagedBackend({ stagedRoot: backend, packagedRoot: path.join(resources, 'backend') });
+      await copyPackagedDependencies({ stagedRoot: backend, packagedRoot: path.join(resources, 'backend') });
       run(python, [path.join(root, 'scripts/macos/sign.py'), app]);
     },
   },

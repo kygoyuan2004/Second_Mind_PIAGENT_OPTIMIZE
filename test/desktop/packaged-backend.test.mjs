@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { verifyPackagedBackend } from '../../scripts/verify-packaged-backend.mjs';
+import { copyPackagedDependencies, verifyPackagedBackend } from '../../scripts/verify-packaged-backend.mjs';
 
 test('release guard rejects omitted dependencies and validates nested dependency bytes', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'secondmind-package-'));
@@ -12,7 +12,8 @@ test('release guard rejects omitted dependencies and validates nested dependency
   const files = [
     '@earendil-works/pi-ai/dist/index.js',
     '@earendil-works/pi-agent-core/dist/index.js',
-     '@modelcontextprotocol/sdk/package.json',
+    '@modelcontextprotocol/sdk/package.json',
+    'undici/lib/llhttp/.gitkeep',
     'outer/node_modules/inner/index.js',
   ];
   try {
@@ -23,7 +24,7 @@ test('release guard rejects omitted dependencies and validates nested dependency
     }
     await fs.mkdir(packagedRoot);
     await assert.rejects(verifyPackagedBackend({ stagedRoot, packagedRoot }), /dependency missing/);
-    await fs.cp(path.join(stagedRoot, 'node_modules'), path.join(packagedRoot, 'node_modules'), { recursive: true });
+    await copyPackagedDependencies({ stagedRoot, packagedRoot });
     assert.equal((await verifyPackagedBackend({ stagedRoot, packagedRoot })).filesVerified, files.length);
     const nested = path.join(packagedRoot, 'node_modules', files.at(-1));
     await fs.writeFile(nested, 'damaged');

@@ -25,7 +25,18 @@ async function filesBelow(root, prefix = '') {
   return files;
 }
 
-/** Runs after extraResources copying and BEFORE NSIS creates a distributable EXE. */
+/** Preserve published npm files, including dotfiles filtered by electron-builder. */
+export async function copyPackagedDependencies({ stagedRoot, packagedRoot }) {
+  const source = path.join(stagedRoot, 'node_modules');
+  const destination = path.join(packagedRoot, 'node_modules');
+  await fs.cp(source, destination, {
+    recursive: true, verbatimSymlinks: true,
+    filter: filename => !['.bin', '.package-lock.json'].includes(path.relative(source, filename)),
+  });
+  return verifyPackagedBackend({ stagedRoot, packagedRoot });
+}
+
+/** Verify the staged production tree before a distributable is created. */
 export async function verifyPackagedBackend({ stagedRoot, packagedRoot }) {
   const source = path.join(stagedRoot, 'node_modules');
   const destination = path.join(packagedRoot, 'node_modules');

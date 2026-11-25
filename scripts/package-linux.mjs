@@ -5,6 +5,7 @@ import { build, Platform, Arch } from 'electron-builder';
 import electronExecutable from 'electron';
 import { createHash } from 'node:crypto';
 import { createReadStream } from 'node:fs';
+import { copyPackagedDependencies } from './verify-packaged-backend.mjs';
 
 const root = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const stage = path.resolve(process.argv[2]);
@@ -16,13 +17,13 @@ await build({ publish: 'never', projectDir: root, targets: Platform.LINUX.create
   files: ['desktop/**/*', 'platform/*.mjs', 'package.json', '!node_modules/**'],
   extraResources: [
     { from: path.join(stage, 'backend'), to: 'backend', filter: ['**/*', '!node_modules/**', '!node_modules'] },
-    { from: path.join(stage, 'backend/node_modules'), to: 'backend/node_modules', filter: ['**/*', '!.bin{,/**/*}', '!.package-lock.json'] },
     { from: path.join(stage, 'runtime'), to: 'runtime' },
   ],
   electronDist: path.dirname(electronExecutable),
   linux: { category: 'Office', executableName: 'second-mind-pi', maintainer: 'Second Mind maintainers <opensource@users.noreply.github.com>' },
   extraMetadata: { homepage: 'https://github.com/kygoyuan2004/Second_Mind_PIAGENT_OPTIMIZE' },
   afterPack: async ({ appOutDir }) => {
+    await copyPackagedDependencies({ stagedRoot: path.join(stage, 'backend'), packagedRoot: path.join(appOutDir, 'resources/backend') });
     for (const file of ['runtime/bin/python','runtime/bin/node','runtime/bin/ffmpeg','backend/node_modules/@earendil-works/pi-ai/dist/index.js','backend/node_modules/@earendil-works/pi-agent-core/dist/index.js','backend/public/study-plan/daily.html']) {
       await fs.access(path.join(appOutDir,'resources',file));
     }
