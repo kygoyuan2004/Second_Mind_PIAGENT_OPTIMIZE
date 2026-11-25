@@ -128,7 +128,10 @@ test('Electron shell runs the real local backend, isolates remote connections, a
 
   const selectedKnowledgeBase = await localPage.locator('#knowledge-base-select').inputValue();
   assert.ok(selectedKnowledgeBase && selectedKnowledgeBase !== 'default', 'desktop generated registry ID is selected');
-  if (packagedExecutable) await verifyPackagedQuestion(t, localPage, selectedKnowledgeBase);
+  if (packagedExecutable) {
+    await expect(localPage.locator('#knowledge-mic').first()).toContainText('下载语音模型（约 486 MB）');
+    await verifyPackagedQuestion(t, localPage, selectedKnowledgeBase);
+  }
   const adminLink = localPage.locator('.knowledge-drive-back');
   await expect(adminLink).toHaveAttribute('href', `/admin-config.html?knowledgeBaseId=${encodeURIComponent(selectedKnowledgeBase)}`);
   await adminLink.click();

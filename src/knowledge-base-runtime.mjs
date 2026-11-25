@@ -141,6 +141,7 @@ export async function createKnowledgeBaseContext(baseConfig, entry, dependencies
     draftDir: path.join(entry.state.dataDir, 'drafts'), ...entry.state,
   };
   const sdkDataDir = path.join(entry.state.dataDir, 'sdk-v1');
+  dependencies.speechModel?.addWorkspace(sdkDataDir);
   const config = {
     ...baseConfig,
     knowledgeBaseId: entry.knowledgeBaseId,
@@ -198,8 +199,8 @@ export async function createKnowledgeBaseContext(baseConfig, entry, dependencies
           piFetch: dependencies.piFetch,
           webFactory: dependencies.piWebFactory || createPiWebTools,
           runtimeConfig: dependencies.runtimeConfig,
-          transcriptionOptions: { tempRoot: path.join(sdkDataDir, 'speech') },
-          videoOptions: { tempRoot: path.join(sdkDataDir, 'video') },
+          transcriptionOptions: { tempRoot: path.join(sdkDataDir, 'speech'), managedModel: dependencies.speechModel },
+          videoOptions: { tempRoot: path.join(sdkDataDir, 'video'), managedModel: dependencies.speechModel },
         });
     conversations = manager.conversations;
     const ready = manager.ready;

@@ -1,14 +1,14 @@
 name: Pi release
 on:
   push:
-    branches: ['release/pi-v0.3.0']
+    branches: ['release/pi-v*']
     tags: ['v*']
   workflow_dispatch:
 permissions:
   contents: read
 concurrency:
   group: pi-release-${{ github.ref }}
-  cancel-in-progress: ${{ github.ref == 'refs/heads/release/pi-v0.3.0' }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
 jobs:
   verify:
     uses: ./.github/workflows/ci.yml

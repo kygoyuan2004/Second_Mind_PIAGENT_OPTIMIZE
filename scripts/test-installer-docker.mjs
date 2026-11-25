@@ -68,7 +68,10 @@ try {
   await installer('init', '--non-interactive', '--vault', vault, '--port', await port());
   const source = await current();
   let call = await client(source);
-  assert.equal((await call('/api/knowledge/status')).executor, 'pi-agent-sdk');
+  const initialStatus = await call('/api/knowledge/status');
+  assert.equal(initialStatus.executor, 'pi-agent-sdk');
+  assert.equal(initialStatus.speechTranscription.model.state, 'not-downloaded');
+  assert.equal((await call('/api/knowledge/speech-model')).model.totalBytes, 486212372);
   const config = await call('/api/admin/runtime-config');
   const saved = await call('/api/admin/runtime-config', { method: 'PUT', body: JSON.stringify({
     expectedRevision: config.revision, adminPassword: password,

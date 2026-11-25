@@ -36,6 +36,6 @@ Building may send every eligible text chunk in the selected Vault. The administr
 
 Web search defaults to disabled. Native web tools use the configured Bailian or Tavily client and SafeWebReader. Web credentials are managed separately from model credentials. Personal learning reviews use local knowledge tools exclusively.
 
-The Docker image supplies Python, faster-whisper, yt-dlp, ffmpeg and ffprobe. `KNOWLEDGE_SPEECH_MODEL` can point to a predownloaded model directory; the default small model needs network access on first use. Media HOME/cache is private per Vault. Native source deployments can override `KNOWLEDGE_SPEECH_PYTHON`, `KNOWLEDGE_VIDEO_PYTHON`, `KNOWLEDGE_VIDEO_YT_DLP`, and relevant ffmpeg paths.
+The Docker image supplies Python, faster-whisper, yt-dlp, ffmpeg and ffprobe. In the question composer, download the default small speech model once (about 486 MB) before recording. Verified models in the instance data volume work offline and are shared across its Vaults. Recordings remain temporary and scoped to the selected Vault. An explicitly configured `KNOWLEDGE_SPEECH_MODEL` can point to a predownloaded model directory. Native source deployments can override `KNOWLEDGE_SPEECH_PYTHON`, `KNOWLEDGE_VIDEO_PYTHON`, `KNOWLEDGE_VIDEO_YT_DLP`, and relevant ffmpeg paths.
 
 Task budgets are defined in `src/original/task-modes.mjs` and `src/original/learning-review.mjs`. The executor applies them to the Pi tool loop.

@@ -31,6 +31,10 @@ def sha256(file):
 
 
 def prepare_model(requested="small"):
+    if Path(requested).is_absolute():
+        if not Path(requested).is_dir():
+            raise ValueError("语音模型目录不存在，请重新检查模型。")
+        return requested
     if os.environ.get("KNOWLEDGE_MEDIA_RUNTIME") != "1":
         return requested
     if requested != "small":
@@ -103,7 +107,9 @@ def prepare_model(requested="small"):
                             raise
                         time.sleep(attempt + 1)
                 downloaded += entry["size"]
-            marker.write_text(json.dumps({"revision": REVISION}), encoding="utf-8")
+            temporary_marker = marker.with_suffix(".tmp")
+            temporary_marker.write_text(json.dumps({"revision": REVISION}), encoding="utf-8")
+            os.replace(temporary_marker, marker)
             write_status(status, state="ready", downloadedBytes=total, totalBytes=total)
             return str(directory)
         except Exception as error:

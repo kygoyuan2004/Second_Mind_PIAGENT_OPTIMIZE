@@ -12,7 +12,7 @@ test('the public knowledge page keeps the original Second Mind UI contract', asy
   for (const id of [
     'knowledge-gate', 'knowledge-login-form', 'knowledge-app', 'knowledge-modes',
     'knowledge-model', 'knowledge-effort', 'knowledge-task-mode', 'knowledge-transcript',
-    'knowledge-form', 'knowledge-prompt', 'knowledge-send', 'knowledge-source-dialog',
+    'knowledge-form', 'knowledge-prompt', 'knowledge-mic', 'knowledge-send', 'knowledge-source-dialog',
   ]) {
     assert.match(html, new RegExp(`id=["']${id}["']`), id);
   }
@@ -20,7 +20,7 @@ test('the public knowledge page keeps the original Second Mind UI contract', asy
   assert.match(html, /\/overrides\.css\?v=9/);
   assert.match(html, /\/knowledge\.css\?v=21/);
   assert.match(html, /\/agent-render\.js\?v=2/);
-  assert.match(html, /\/knowledge\.js\?v=20261120-search/);
+  assert.match(html, /\/knowledge\.js\?v=0\.3\.1-speech/);
   assert.doesNotMatch(html, /\/drive\.html|Yuan Drive/);
   assert.match(html, /href="\/admin-config\.html">配置管理/);
 });

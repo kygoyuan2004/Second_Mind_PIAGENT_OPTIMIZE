@@ -25,6 +25,7 @@ ENV NODE_ENV=production \
     HOST=0.0.0.0 \
     PORT=8787 \
     DATA_DIR=/app/data \
+    SECOND_MIND_DOCKER_SPEECH=1 \
     PUBLIC_DIR=/app/public \
     VAULT_PATH=/vaults \
     KNOWLEDGE_BASE_ALLOWED_ROOTS=/vaults

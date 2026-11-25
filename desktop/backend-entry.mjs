@@ -7,10 +7,6 @@ let application;
 let started = false;
 let closing = false;
 let tick;
-let mediaOperation;
-let mediaAbort;
-let runtimeResources;
-let runtimeStateRoot;
 let sequence = 0;
 const pending = new Map();
 const send = (message) => { if (process.connected) { try { process.send(message, () => {}); } catch {} } };
@@ -26,7 +22,7 @@ function codecRequest(operation, input) {
 
 export function applicationBusy(app) {
   if (!app) return false;
-  if (mediaOperation || app.desktopActivity?.active > 0 || app.knowledgeBaseHub?.hasActiveTasks()) return true;
+  if (app.speechModel?.operation || app.desktopActivity?.active > 0 || app.knowledgeBaseHub?.hasActiveTasks()) return true;
   const contexts = app.knowledgeBaseHub
     ? [...app.knowledgeBaseHub.records.values()].map((r) => r.context).filter(Boolean)
     : [app];
@@ -43,12 +39,12 @@ async function close() {
   if (closing) return;
   closing = true;
   clearInterval(tick);
-  mediaAbort?.abort();
   const deadline = setTimeout(() => process.exit(1), 15_000);
   deadline.unref();
   try {
     if (application) {
       application.desktopActivity.closing = true;
+      await application.speechModel?.close();
       if (application.knowledgeBaseHub) await application.knowledgeBaseHub.close();
       else await application.manager?.close();
       application.server.closeAllConnections?.();
@@ -64,8 +60,6 @@ async function start(message) {
   if (started) throw new Error('Backend already started.');
   started = true;
   const { stateRoot, appRoot, vaults, token } = message;
-  runtimeStateRoot = stateRoot;
-  runtimeResources = message.resources;
   if (!Array.isArray(vaults) || !vaults.length || !/^[a-f0-9]{64}$/.test(token)) throw new Error('Invalid desktop startup.');
   const { installPrivateCodec, protectPrivateDirectory } = await import('../platform/private-storage.mjs');
   installPrivateCodec({
@@ -143,14 +137,9 @@ async function start(message) {
     }
     if (message?.type === 'media-status' || message?.type === 'media-prepare') {
       void (async () => {
-        if (!application || !runtimeResources || closing || application.desktopActivity.closing) throw new Error('Backend is not ready.');
-        const { readMediaModelStatus, prepareMediaModel } = await import('./media-model.mjs');
-        if (message.type === 'media-prepare' && !mediaOperation) {
-          mediaAbort = new AbortController();
-          mediaOperation = prepareMediaModel({ resources: runtimeResources, stateRoot: runtimeStateRoot, signal: mediaAbort.signal });
-          mediaOperation.catch(() => {}).finally(() => { mediaOperation = null; mediaAbort = null; });
-        }
-        send({ type: 'media-result', id: message.id, status: await readMediaModelStatus(runtimeStateRoot) });
+        if (!application?.speechModel || closing || application.desktopActivity.closing) throw new Error('Backend is not ready.');
+        const status = message.type === 'media-prepare' ? await application.speechModel.start() : await application.speechModel.status();
+        send({ type: 'media-result', id: message.id, status });
       })().catch(() => send({ type: 'media-result', id: message.id, error: '语音组件暂时不可用，请检查安装后重试。' }));
       return;
     }

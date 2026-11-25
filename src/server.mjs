@@ -11,6 +11,7 @@ import { createConfig, validateRuntimeConfig } from './config.mjs';
 import { EmbeddingClient } from './embedding-client.mjs';
 import { KnowledgeBaseHub } from './knowledge-base-hub.mjs';
 import { KnowledgeBaseRegistry } from './knowledge-base-registry.mjs';
+import { configuredSpeechModel } from './speech-model.mjs';
 import { createKnowledgeBaseContext } from './knowledge-base-runtime.mjs';
 import {
   buildRegisteredProviderConfigPatch,
@@ -553,6 +554,7 @@ export async function createApp(configInput, dependencies = {}) {
   let conversations = dependencies.conversations || null;
   let manager = dependencies.manager || null;
   let knowledgeBaseHub = dependencies.knowledgeBaseHub || null;
+  const speechModel = dependencies.speechModel ?? configuredSpeechModel(config.dataDir);
 
   if (knowledgeBaseRegistry) {
     knowledgeBaseHub ||= new KnowledgeBaseHub({
@@ -562,6 +564,7 @@ export async function createApp(configInput, dependencies = {}) {
         entry,
         {
           ...dependencies,
+          speechModel,
           runtimeConfig,
           llmRouter,
           webSearch,
@@ -584,7 +587,7 @@ export async function createApp(configInput, dependencies = {}) {
       knowledgeBaseId: config.knowledgeBaseId || 'default', revision: 'default',
       name: config.vaultLabel, rootPath: config.vaultPath,
       state: { ...config },
-    }, { ...dependencies, runtimeConfig });
+    }, { ...dependencies, runtimeConfig, speechModel });
     ({ embedding, index, embeddingRuntime, store, conversations, manager } = context);
   }
   const sessions = dependencies.sessions || new SessionManager(config.auth);
@@ -1202,6 +1205,13 @@ export async function createApp(configInput, dependencies = {}) {
         throw httpError(503, 'Knowledge service is still initializing.', 'INITIALIZATION_PENDING');
       }
 
+      if (pathname === '/api/knowledge/speech-model' && ['GET', 'POST'].includes(req.method)) {
+        requireAdministrator(user);
+        const context = resolveKnowledgeContext(requestKnowledgeBaseId(url));
+        if (!speechModel) throw httpError(404, '当前部署使用自定义语音服务。', 'SPEECH_MODEL_UNMANAGED');
+        const model = req.method === 'GET' ? await speechModel.status() : await speechModel.start();
+        return json(res, model.state === 'downloading' && req.method === 'POST' ? 202 : 200, withContextIdentity({ model }, context));
+      }
       if (pathname === '/api/knowledge/status' && req.method === 'GET') {
         const context = resolveKnowledgeContext(requestKnowledgeBaseId(url));
         return json(res, 200, {
@@ -1417,6 +1427,7 @@ export async function createApp(configInput, dependencies = {}) {
   return {
     server,
     desktopActivity,
+    speechModel,
     config,
     manager,
     index,
@@ -1472,6 +1483,7 @@ const launchedDirectly = process.argv[1] && import.meta.url === pathToFileURL(pa
 if (launchedDirectly) {
   import('./bootstrap.mjs').then(({ startApplication }) => startApplication()).then((app) => {
     const close = async () => {
+      await app.speechModel?.close();
       if (app.knowledgeBaseHub) await app.knowledgeBaseHub.close();
       else await app.manager.close();
       await new Promise((resolve) => app.server.close(resolve));

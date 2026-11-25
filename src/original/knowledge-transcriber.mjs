@@ -2,7 +2,6 @@ import { markPublicMessage } from '../public-errors.mjs';
 import crypto from 'node:crypto';
 import { configuredQwenAsr } from './local-asr.mjs';
 import { spawnHidden, terminateProcessTree } from '../../platform/process-tree.mjs';
-import { readMediaModelStatus } from '../../desktop/media-model.mjs';
 import fsp from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -63,10 +62,11 @@ async function canExecute(target) {
 
 export class KnowledgeTranscriber {
   constructor(options = {}) {
+    this.managedModel = options.managedModel;
     this.asr = configuredQwenAsr();
     this.python = path.resolve(
       options.python || this.asr?.python || process.env.KNOWLEDGE_SPEECH_PYTHON ||
-        path.resolve(process.env.KNOWLEDGE_SPEECH_PYTHON || '/opt/media/bin/python'),
+        this.managedModel?.resources.python || '/opt/media/bin/python',
     );
     this.script = path.resolve(options.script || this.asr?.script || process.env.KNOWLEDGE_SPEECH_SCRIPT || DEFAULT_SCRIPT);
     this.model = String(options.model || this.asr?.model || process.env.KNOWLEDGE_SPEECH_MODEL || 'small');
@@ -85,9 +85,7 @@ export class KnowledgeTranscriber {
       maxBytes: MAX_AUDIO_BYTES,
       maxDurationMs: MAX_AUDIO_DURATION_MS,
       privacy: 'server-temporary',
-      ...(process.env.KNOWLEDGE_MEDIA_MODEL_STATUS ? {
-        model: await readMediaModelStatus(path.dirname(path.dirname(process.env.KNOWLEDGE_MEDIA_MODEL_STATUS))),
-      } : {}),
+      ...(this.managedModel ? { model: await this.managedModel.status() } : {}),
     };
   }
 
@@ -96,6 +94,8 @@ export class KnowledgeTranscriber {
     if (!availability.available) {
       throw transcriptionError(503, '服务器语音转写尚未就绪，请使用手机键盘自带的听写。', 'SPEECH_UNAVAILABLE');
     }
+    const model = this.managedModel ? await this.managedModel.directory() : this.model;
+    if (!model) throw transcriptionError(409, '请先下载语音模型，再开始口述。', 'SPEECH_MODEL_NOT_READY');
     if (this.runningUsers.has(userId)) {
       throw transcriptionError(409, '已有一段录音正在转写，请稍候。', 'SPEECH_BUSY');
     }
@@ -126,7 +126,7 @@ export class KnowledgeTranscriber {
     this.runningUsers.add(userId);
     try {
       await fsp.writeFile(temporary, audio, { mode: 0o600, flag: 'wx' });
-      const text = await this.run(temporary);
+      const text = await this.run(temporary, model);
       return { text, durationMs: Number.isFinite(durationMs) ? durationMs : 0 };
     } finally {
       this.runningUsers.delete(userId);
@@ -134,9 +134,9 @@ export class KnowledgeTranscriber {
     }
   }
 
-  run(audioFile) {
+  run(audioFile, model = this.model) {
     return new Promise((resolve, reject) => {
-      const child = spawnHidden(this.python, ['-B', '-X', 'utf8', this.script, audioFile, '--model', this.model, '--language', 'zh'], {
+      const child = spawnHidden(this.python, ['-B', '-X', 'utf8', this.script, audioFile, '--model', model, '--language', 'zh'], {
         cwd: this.tempRoot,
         env: { ...safeEnvironment(this.home), ...this.asr?.env },
         stdio: ['ignore', 'pipe', 'pipe'],

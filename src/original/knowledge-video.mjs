@@ -228,6 +228,7 @@ export class KnowledgeVideoProcessor {
     this.ytdlpModule = options.ytdlpModule ?? process.env.KNOWLEDGE_VIDEO_YTDLP_MODULE === '1';
     this.ffmpeg = path.resolve(options.ffmpeg || process.env.KNOWLEDGE_VIDEO_FFMPEG || DEFAULT_FFMPEG);
     this.speechModel = String(options.speechModel || this.asr?.model || process.env.KNOWLEDGE_SPEECH_MODEL || 'small');
+    this.managedModel = this.asr || process.env.KNOWLEDGE_VIDEO_TRANSCRIBE_SCRIPT ? null : options.managedModel;
     this.maxUploadBytes = positiveInteger(options.maxUploadBytes || process.env.KNOWLEDGE_VIDEO_MAX_BYTES, DEFAULT_MAX_UPLOAD_BYTES);
     this.maxDurationSeconds = positiveInteger(options.maxDurationSeconds || process.env.KNOWLEDGE_VIDEO_MAX_DURATION_SECONDS, DEFAULT_MAX_DURATION_SECONDS);
     this.retentionMs = positiveInteger(options.retentionMs, DEFAULT_RETENTION_MS);
@@ -505,10 +506,11 @@ export class KnowledgeVideoProcessor {
 
   async transcribe(source, directory, signal) {
     const output = path.join(directory, 'transcript.json');
+    const model = await this.managedModel?.directory() || this.speechModel;
     await this.runProcess(this.asr?.python || this.python, [
       '-B', '-X', 'utf8',
-      this.transcribeScript, source, '--output', output, '--model', this.speechModel, '--language', 'auto',
-    ], { cwd: directory, signal, asrEnv: this.asr?.env, timeoutMs: 4 * 60 * 60_000, errorLimit: 20_000 });
+      this.transcribeScript, source, '--output', output, '--model', model, '--language', 'auto',
+    ], { cwd: directory, signal, asrEnv: this.asr?.env || this.managedModel?.environment, timeoutMs: 4 * 60 * 60_000, errorLimit: 20_000 });
     const payload = JSON.parse(await fsp.readFile(output, 'utf8'));
     const segments = Array.isArray(payload.segments) ? payload.segments : [];
     let transcript = '';

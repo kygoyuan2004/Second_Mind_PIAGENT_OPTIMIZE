@@ -34,6 +34,7 @@ const state = {
   mediaStartedAt: 0,
   mediaTimer: null,
   transcribing: false,
+  speechModelAction: false,
   formErrorTimer: null,
   searchController: null,
   searchRequestId: 0,
@@ -647,7 +648,7 @@ function setBusy(value) {
   elements.videoOutput.disabled = value;
   elements.webSearch.disabled = value;
   elements.attach.disabled = value;
-  elements.mic.disabled = value || state.transcribing;
+  updateMicAvailability();
   elements.conversationList.querySelectorAll('button').forEach((button) => { button.disabled = value; });
   syncTaskModeVisualState();
 }
@@ -1563,6 +1564,44 @@ function setMicButton(label, active = false) {
   elements.mic.classList.toggle('knowledge-mic-active', active);
 }
 
+let speechModelTimer;
+let speechModelRequest = 0;
+
+function updateMicAvailability() {
+  elements.mic.disabled = state.busy || state.transcribing || state.speechModelAction ||
+    (state.voiceMode === 'model' && state.status?.speechTranscription?.model?.state === 'downloading');
+}
+
+function scheduleSpeechModelCheck() {
+  clearTimeout(speechModelTimer);
+  if (document.hidden || state.voiceMode !== 'model') return;
+  const downloading = state.status.speechTranscription.model.state === 'downloading';
+  speechModelTimer = setTimeout(() => void refreshSpeechModel(), downloading ? 1000 : 10000);
+}
+
+async function refreshSpeechModel(method = 'GET') {
+  clearTimeout(speechModelTimer);
+  const request = ++speechModelRequest;
+  try {
+    const { model } = await api('/api/knowledge/speech-model', { method });
+    if (request !== speechModelRequest) return false;
+    state.status.speechTranscription.model = model;
+    setupSpeech();
+    return model.state === 'ready';
+  } catch (error) {
+    if (request === speechModelRequest && state.speechModelAction) {
+      if (method === 'POST') {
+        state.status.speechTranscription.model.state = 'error';
+        setupSpeech();
+      }
+      setFormError(error.message);
+    }
+    return false;
+  } finally {
+    if (request === speechModelRequest) scheduleSpeechModelCheck();
+  }
+}
+
 function growPrompt() {
   elements.prompt.style.height = 'auto';
   const maximum = Math.max(110, Math.min(300, window.innerHeight * 0.28));
@@ -1613,10 +1652,11 @@ async function transcribeRecording(blob, durationMs) {
     setStatus('', '口述已就绪', '口述已填入输入框，确认内容后即可发送。');
   } catch (error) {
     showVoiceError(error.message);
+    if (error.code === 'SPEECH_MODEL_NOT_READY') await refreshSpeechModel();
   } finally {
     state.transcribing = false;
-    elements.mic.disabled = state.busy;
-    setMicButton('开始口述');
+    updateMicAvailability();
+    if (state.voiceMode === 'recording') setMicButton('开始口述');
   }
 }
 
@@ -1725,6 +1765,26 @@ function setupSpeech() {
     window.MediaRecorder,
   );
   elements.mic.hidden = false;
+  const speech = state.status?.speechTranscription;
+  const model = speech?.model;
+  if (speech?.available && model && model.state !== 'ready') {
+    state.voiceMode = 'model';
+    let label = '下载语音模型（约 ' + Math.round(model.totalBytes / 1e6) + ' MB）';
+    if (model.state === 'error') label = '重试下载语音模型';
+    if (model.state === 'downloading') {
+      const percent = Math.min(100, Math.floor(100 * (model.downloadedBytes || 0) / model.totalBytes));
+      label = percent >= 100 ? '正在校验语音模型…' : '正在下载语音模型 · ' + percent + '%';
+    } else if (model.state === 'error') {
+      label = '重试下载语音模型';
+    }
+    setMicButton(label);
+    updateMicAvailability();
+    scheduleSpeechModelCheck();
+    return;
+  }
+  clearTimeout(speechModelTimer);
+  state.voiceMode = 'none';
+  updateMicAvailability();
   if (canRecord) {
     state.voiceMode = 'recording';
     setMicButton('开始口述');
@@ -1740,8 +1800,22 @@ function setupSpeech() {
   setMicButton('键盘听写');
 }
 
-function toggleSpeech() {
+async function toggleSpeech() {
   if (!state.listening && !state.transcribing) clearFormError();
+  if (state.speechModelAction) return;
+  if (state.voiceMode === 'model' || (state.voiceMode === 'recording' && !state.listening && state.status?.speechTranscription?.model)) {
+    const download = state.voiceMode === 'model';
+    state.speechModelAction = true;
+    updateMicAvailability();
+    try {
+      const ready = await refreshSpeechModel(download ? 'POST' : 'GET');
+      if (!download && ready && !state.busy && state.voiceMode === 'recording') await startMediaRecording();
+    } finally {
+      state.speechModelAction = false;
+      updateMicAvailability();
+    }
+    return;
+  }
   if (state.voiceMode === 'recording') {
     if (state.listening && state.mediaRecorder?.state === 'recording') state.mediaRecorder.stop();
     else if (!state.transcribing) startMediaRecording();
@@ -2158,9 +2232,14 @@ window.addEventListener('orientationchange', () => {
   }, 300);
 });
 window.addEventListener('beforeunload', () => {
+  clearTimeout(speechModelTimer);
+  speechModelRequest++;
   state.searchController?.abort();
   state.source?.close();
   if (state.mediaRecorder?.state === 'recording') state.mediaRecorder.stop();
   state.mediaStream?.getTracks().forEach((track) => track.stop());
+});
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && state.voiceMode === 'model' && !state.speechModelAction) void refreshSpeechModel();
 });
 initialize();

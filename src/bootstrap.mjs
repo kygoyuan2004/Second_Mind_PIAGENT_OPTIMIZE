@@ -308,6 +308,7 @@ const launchedDirectly = process.argv[1] &&
 if (launchedDirectly) {
   startApplication().then((app) => {
     const close = async () => {
+      await app.speechModel?.close();
       if (app.knowledgeBaseHub) await app.knowledgeBaseHub.close();
       else await app.manager.close();
       await new Promise((resolve) => app.server.close(resolve));

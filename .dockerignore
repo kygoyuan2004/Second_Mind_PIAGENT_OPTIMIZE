@@ -48,6 +48,7 @@ src/scripts/**
 !src/sdk-knowledge-store.mjs
 !src/sdk-state-migration.mjs
 !src/server.mjs
+!src/speech-model.mjs
 !src/source-resolver.mjs
 !src/tavily-web-search-client.mjs
 !src/vault-replica.mjs
