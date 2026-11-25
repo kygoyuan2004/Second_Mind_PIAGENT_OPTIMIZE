@@ -1,0 +1,268 @@
+import assert from 'node:assert/strict';
+import fsp from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+import test from 'node:test';
+import { executePiTask } from '../../src/pi-agent-executor.mjs';
+import { messageResponse } from '../sdk-test-helpers.mjs';
+import { KnowledgeAgentManager } from '../../src/original/knowledge-agent.mjs';
+import {
+  createLearningReview, learningReviewPrompt, normalizeLearningReview, resolveLearningReview,
+  createLearningReviewToolBudget, learningReviewExecutionBudget, knowledgeEvidencePolicy,
+} from '../../src/original/learning-review.mjs';
+
+const QUESTION = '总结最近一个月的学习重点';
+const CLOCK = '2026-09-06T04:05:06.000Z';
+const OPTIONS = { now: CLOCK, timeZone: 'Asia/Shanghai' };
+
+test('个人学习回顾确定自然月窗口，拒绝公有研究与文件修改问题', () => {
+  const review = createLearningReview(QUESTION, OPTIONS);
+  assert.equal(review.scope, 'all');
+  assert.equal(review.startInclusive, '2026-08-05T16:00:00.000Z');
+  assert.equal(review.endInclusive, CLOCK);
+  assert.equal(review.anchorTime, CLOCK);
+  assert.match(learningReviewPrompt(review), /2026-08-06 00:00:00 至 2026-09-06 12:05:06/);
+  for (const question of [
+    '总结最近一个月机器学习研究进展', '总结最近一个月深度学习的最新进展',
+    '最近一个月修改了哪些学习笔记', '列出最近一个月学习笔记的修改',
+    '所有', '如何学习 CUDA？', '请总结 RAG 论文的结论',
+  ]) assert.equal(createLearningReview(question, OPTIONS), null, question);
+  assert.ok(createLearningReview('总结我最近一个月机器学习的学习进展', OPTIONS));
+  assert.equal(createLearningReview('总结最近两个月的学习重点', OPTIONS), null, '不把未支持的两个月误解为一个月');
+});
+
+test('跨年、月末、闰年和指定日期范围严格按本地日历计算', () => {
+  for (const [now, expected] of [
+    ['2026-01-06T04:00:00Z', '2025-12-05T16:00:00.000Z'],
+    ['2026-03-31T04:00:00Z', '2026-02-27T16:00:00.000Z'],
+    ['2024-03-31T04:00:00Z', '2024-02-28T16:00:00.000Z'],
+  ]) assert.equal(createLearningReview(QUESTION, { ...OPTIONS, now }).startInclusive, expected);
+  const lastMonth = createLearningReview('总结上个月的学习重点', OPTIONS);
+  assert.equal(lastMonth.startInclusive, '2026-07-31T16:00:00.000Z');
+  assert.equal(lastMonth.endInclusive, '2026-08-31T15:59:59.999Z');
+  const explicit = createLearningReview('总结2026-08-06至2026-09-05的学习重点', OPTIONS);
+  assert.equal(explicit.startInclusive, '2026-08-05T16:00:00.000Z');
+  assert.equal(explicit.endInclusive, '2026-09-05T15:59:59.999Z');
+  assert.equal(createLearningReview('总结2026-02-30至2026-03-05的学习重点', OPTIONS), null);
+  assert.equal(createLearningReview('总结2026-09-05至2026-08-06的学习重点', OPTIONS), null);
+});
+
+test('本周及上周按周一开始，时区边界不会多纳入前一天', () => {
+  const week = createLearningReview('总结本周学习重点', OPTIONS);
+  assert.equal(week.startInclusive, '2026-08-30T16:00:00.000Z');
+  const previous = createLearningReview('总结上周学习重点', OPTIONS);
+  assert.equal(previous.startInclusive, '2026-08-23T16:00:00.000Z');
+  assert.equal(previous.endInclusive, '2026-08-30T15:59:59.999Z');
+  const midnight = createLearningReview(QUESTION, { ...OPTIONS, now: '2026-09-05T16:00:00Z' });
+  assert.equal(midnight.startInclusive, '2026-08-05T16:00:00.000Z');
+  const dst = createLearningReview(QUESTION, { now: '2026-04-06T13:00:00Z', timeZone: 'America/New_York' });
+  assert.equal(dst.startInclusive, '2026-03-06T05:00:00.000Z');
+});
+
+test('旧会话三轮原话复用首轮日期，新主题不继承陈旧范围', () => {
+  const conversation = { messages: [
+    { role: 'user', text: QUESTION, createdAt: CLOCK },
+    { role: 'assistant', text: '请提供学科', createdAt: CLOCK },
+  ] };
+  const expected = createLearningReview(QUESTION, OPTIONS);
+  for (const prompt of ['所有', '所有的', '全部']) {
+    assert.deepEqual(resolveLearningReview(prompt, conversation, {
+      ...OPTIONS, now: '2026-10-06T04:00:00Z',
+    }), expected);
+    conversation.messages.push({ role: 'user', text: prompt, createdAt: '2026-10-06T04:00:00Z' });
+  }
+  conversation.learningReview = expected;
+  conversation.messages.push({ role: 'user', text: '最新公开论文有哪些？', createdAt: CLOCK });
+  assert.equal(resolveLearningReview('所有', conversation, OPTIONS), null);
+  assert.equal(normalizeLearningReview({ ...expected, startInclusive: '2026-08-02T16:00:00.000Z' }), null);
+});
+
+test('回顾覆盖技术笔记与正文日期，保留范围、分段读取及计划与完成区分', () => {
+  const prompt = learningReviewPrompt(createLearningReview(QUESTION, OPTIONS));
+  for (const required of [
+    /glob_notes\/grep_notes 枚举全库/, /技术笔记、整理笔记、日记、计划、周计划和日期段落/, /日期表格列/, /startLine\/limit 连续分段/,
+    /8 月 3—5 日不属于范围/, /最后修改时间只能说明最后修改/, /技术笔记不必由日记或计划引出/, /正文和 frontmatter/,
+    /完成、进行中、计划、未确认/, /不能判断“未完成”/, /期内最新明确事件/,
+    /部分处理数/, /预算未覆盖数/, /不编造覆盖率/, /不得要求用户开启时间窗/,
+  ]) assert.match(prompt, required);
+});
+
+test('首轮、阶段提醒与收尾均允许独立技术笔记，并保留时间来源及覆盖约束', async () => {
+  const prompt = learningReviewPrompt(createLearningReview(QUESTION, OPTIONS));
+  const budget = createLearningReviewToolBudget({});
+  const reminders = [];
+  for (let index = 0; index < 40; index++) {
+    const { reminder } = budget.reserve('read_note_lines');
+    if (reminder) reminders.push(reminder);
+  }
+  assert.equal(reminders.length, 3);
+  const denied = budget.reserve('read_note_lines');
+  for (const text of [prompt, ...reminders, denied.reason]) {
+    assert.ok(text.includes(knowledgeEvidencePolicy));
+    assert.match(text, /技术笔记可以纳入本期回顾，无须日记佐证/u);
+    assert.match(text, /注明实际日期来源及其含义/u);
+    assert.match(text, /日期不明确的相关笔记可以列出并概述/u);
+    assert.match(text, /时间待核/u);
+    assert.match(text, /不自动推断已经掌握、实践或完成全部任务/u);
+    assert.match(text, /不编造不存在的文件、图片、附件或时间/u);
+    assert.doesNotMatch(text, /本期活动与成果只能由|文件元数据绝不建立|无法给出期内活动句|必须紧邻给出：事件日期/u);
+    assert.match(text, /候选记录数 = 完整处理数 \+ 部分处理数 \+ 读取失败数 \+ 预算未覆盖数/u);
+    assert.match(text, /空文件成功 read_note_lines 应计完整处理/u);
+    assert.match(text, /不能同时计读取失败/u);
+  }
+});
+
+test('服务端工具预算按独立调用计数，并发第 41 次必须拒绝且留下最终汇总空间', async () => {
+  const task = {};
+  let notifications = 0;
+  const budget = createLearningReviewToolBudget(task, { onLimit: () => { notifications += 1; } });
+  const decisions = await Promise.all(Array.from({length: 41}, async (_, i) =>
+    budget.reserve(i % 2 ? 'read_note_lines' : 'grep_notes')));
+  assert.equal(budget.state.calls, 40);
+  assert.equal(budget.state.closed, true);
+  assert.equal(notifications, 1);
+  assert.ok(decisions.slice(0, 40).every((d) => !d.block));
+  assert.equal(decisions[40].block, true);
+  assert.equal(budget.reserve('cite_passage').block, true);
+  assert.deepEqual(budget.reserve('get_reading_coverage'), {});
+  assert.match(decisions[40].reason, /直接生成最终回答/u);
+  assert.match(decisions[39].reminder, /最后一次获准/u);
+  assert.equal(learningReviewExecutionBudget.maxTurns, 50);
+});
+
+test('读取阶段 24 分钟后后端停止扩展，保留 6 分钟汇总时间', async () => {
+  let now = 1_000;
+  const task = {};
+  const budget = createLearningReviewToolBudget(task, { now: () => now });
+  budget.reserve('glob_notes');
+  now += 24 * 60_000;
+  const decision = budget.reserve('read_note_lines');
+  assert.equal(decision.block, true);
+  assert.equal(budget.state.calls, 1);
+  assert.equal(learningReviewExecutionBudget.timeoutMs - learningReviewExecutionBudget.retrievalTimeoutMs, 6 * 60_000);
+});
+
+async function waitForTask(manager, id) {
+  for (let index = 0; index < 100; index += 1) {
+    const task = manager.getTask('review-test-user', id);
+    if (['completed', 'failed'].includes(task.status)) {
+      assert.equal(task.status, 'completed', JSON.stringify(task.events));
+      await manager.persistQueue;
+      return task;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+  throw new Error('Mock task did not finish');
+}
+
+test('原话三轮直接进入只读 Agent，固定范围跨重启恢复且联网默认关闭', async (t) => {
+  const root = await fsp.mkdtemp(path.join(os.tmpdir(), 'yuan-learning-review-'));
+  const vault = path.join(root, 'vault');
+  await fsp.mkdir(vault);
+  const marker = path.join(vault, 'synthetic.md');
+  await fsp.writeFile(marker, '# Synthetic immutable source\n');
+  const before = await fsp.stat(marker);
+  const captured = [];
+  let normalSearches = 0;
+  let webFactories = 0;
+  let clock = CLOCK;
+  const managers = [];
+  t.after(async () => {
+    for (const manager of managers) { manager.close(); await manager.persistQueue; }
+    await fsp.rm(root, { recursive: true, force: true });
+  });
+  const makeManager = () => {
+    const manager = new KnowledgeAgentManager({
+      now: () => clock, timeZone: 'Asia/Shanghai', index: false, hybridSearchEnabled: false,
+      conversationFile: path.join(root, 'private', 'history.json'),
+      store: {
+        root: vault, realRoot: vault, attachIndex() {},
+        async initialize() {}, async assertNoSymlinks() {}, async audit() {},
+        async search() { normalSearches += 1; return []; },
+      },
+      videoProcessor: { ready: Promise.resolve(), async cleanupStale() {} },
+      executeTask(task, conversation) {
+        this.webFactory = async () => { webFactories++; return {tools: [], close() {}}; };
+        this.transportFetch = async (_url, init) => {
+          captured.push(JSON.parse(init.body));
+          return messageResponse({type: 'text', text: '合成回顾结果。未读 0。'}, 'end_turn');
+        };
+        return executePiTask(this, task, conversation, { providerId: 'custom', protocol: 'anthropic-messages',
+          authMode: 'none', apiBase: 'https://model.example', model: task.model.value, webSearch: { enabled: true } });
+      },
+    });
+    managers.push(manager);
+    return manager;
+  };
+  let manager = makeManager();
+  await manager.ready;
+  let conversationId;
+  let window;
+  for (const [index, prompt] of [QUESTION, '所有', '所有的'].entries()) {
+    const result = await manager.createTask('review-test-user', {
+      kind: 'qa', prompt, model: 'qwen', effort: 'xhigh', webSearch: true, conversationId,
+    });
+    conversationId = result.conversationId;
+    const task = await waitForTask(manager, result.taskId);
+    window ||= task.learningReview;
+    assert.deepEqual(task.learningReview, window);
+    assert.equal(task.webSearch, false);
+    assert.equal(task.retrieval, null);
+    assert.equal(task.taskMode.id, 'normal');
+    assert.equal(task.taskMode.maxTurns, 50);
+    assert.equal(task.taskMode.timeoutMs, 30 * 60_000);
+    assert.equal(task.learningReviewToolBudget.calls, 0);
+    const request = captured.at(-1);
+    assert.match(JSON.stringify(request.messages), /原始问题：总结最近一个月的学习重点/);
+    assert.match(JSON.stringify(request.messages), /2026-08-06 00:00:00 至 2026-09-06 12:05:06/);
+    assert.ok(request.tools.some((tool) => tool.name === 'get_reading_coverage'));
+    assert.ok(!request.tools.some((tool) => /web_|researcher|Write|Edit|Bash/.test(tool.name)));
+    assert.ok(task.events.some((event) => event.type === 'warning' && event.data.message.includes('覆盖账本')));
+    if (index === 0) {
+      manager.close();
+      clock = '2026-10-06T04:00:00.000Z';
+      manager = makeManager();
+      await manager.ready;
+    }
+  }
+  assert.equal(normalSearches, 0, '回顾不能先以 topK 召回作为覆盖清单');
+  assert.equal(webFactories, 0);
+  const history = JSON.parse(await fsp.readFile(path.join(root, 'private', 'history.json'), 'utf8'));
+  assert.deepEqual(history.conversations[0].learningReview, window);
+  assert.equal(history.conversations[0].messages.filter((message) => message.role === 'user')
+    .every((message) => message.learningReview.anchorTime === CLOCK), true);
+  assert.equal(await fsp.readFile(marker, 'utf8'), '# Synthetic immutable source\n');
+  const after = await fsp.stat(marker);
+  assert.equal(after.mtimeMs, before.mtimeMs);
+  assert.equal(after.mode, before.mode);
+
+  const ordinary = await manager.createTask('review-test-user', {
+    kind: 'qa', prompt: '总结最近一个月机器学习研究进展', model: 'qwen', effort: 'xhigh',
+    webSearch: true, conversationId,
+  });
+  const task = await waitForTask(manager, ordinary.taskId);
+  assert.equal(task.learningReview, null);
+  assert.equal(task.webSearch, true);
+  assert.equal(task.taskMode.maxTurns, 20);
+  assert.equal(task.taskMode.timeoutMs, 10 * 60_000);
+  assert.equal(normalSearches, 1);
+  assert.equal(webFactories, 1);
+
+  // Preserve an old restrictive answer in the resumed SDK conversation. The
+  // current policy must also be sent for ordinary content follow-ups.
+  const conversation = manager.conversations.get(conversationId);
+  conversation.messages.push({ role: 'assistant', text: '旧回答：没有日记活动句的技术笔记不计入本期成果。', createdAt: CLOCK });
+  const messageCount = conversation.messages.length;
+  const followUp = await manager.createTask('review-test-user', {
+    kind: 'qa', prompt: '解释这些技术笔记的正文内容', model: 'qwen', effort: 'xhigh',
+    webSearch: true, conversationId,
+  });
+  const followUpTask = await waitForTask(manager, followUp.taskId);
+  assert.equal(followUpTask.learningReview, null);
+  assert.match(JSON.stringify(captured.at(-1).messages), /旧回答：没有日记活动句/);
+  assert.ok(JSON.stringify(captured.at(-1).system).includes('取代历史消息中的日记或计划佐证门槛'));
+  assert.equal(conversation.messages.length, messageCount + 2);
+  assert.ok(conversation.messages.some((m) => m.text.startsWith('旧回答：')));
+  assert.equal(normalSearches, 2);
+  assert.equal(webFactories, 2);
+});

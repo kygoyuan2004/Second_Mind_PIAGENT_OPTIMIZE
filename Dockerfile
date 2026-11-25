@@ -1,0 +1,63 @@
+# syntax=docker/dockerfile:1.7
+
+ARG NODE_IMAGE=node:22-bookworm-slim@sha256:83f487e0a63425e5b4d146fb5e5be574bcbe1b7b843d3ebafdd95eaf7767a7e5
+
+FROM ${NODE_IMAGE} AS dependencies
+WORKDIR /app
+ENV NODE_ENV=production
+
+COPY package*.json ./
+RUN --mount=type=cache,target=/root/.npm \
+    if [ -f package-lock.json ]; then \
+      npm ci --omit=dev --ignore-scripts --no-audit --no-fund; \
+    else \
+      npm install --omit=dev --ignore-scripts --no-audit --no-fund; \
+    fi
+
+FROM ${NODE_IMAGE} AS runtime
+
+LABEL org.opencontainers.image.title="Second Mind · Pi Agent" \
+      org.opencontainers.image.description="Self-hosted, source-grounded Obsidian knowledge assistant" \
+      org.opencontainers.image.source="https://github.com/kygoyuan2004/Second_Mind_PIAGENT_OPTIMIZE" \
+      org.opencontainers.image.licenses="MIT"
+
+ENV NODE_ENV=production \
+    HOST=0.0.0.0 \
+    PORT=8787 \
+    DATA_DIR=/app/data \
+    PUBLIC_DIR=/app/public \
+    VAULT_PATH=/vaults \
+    KNOWLEDGE_BASE_ALLOWED_ROOTS=/vaults
+
+WORKDIR /app
+
+COPY requirements-media.txt /tmp/requirements-media.txt
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 python3-venv ffmpeg ca-certificates libgomp1 ripgrep \
+    && python3 -m venv /opt/media \
+    && /opt/media/bin/pip install --no-cache-dir -r /tmp/requirements-media.txt \
+    && rm -rf /var/lib/apt/lists/* /tmp/requirements-media.txt \
+    && mkdir -p /app/data /vaults && chown -R node:node /app /vaults
+
+COPY --from=dependencies --chown=node:node /app/node_modules ./node_modules
+# Copy only runtime code and browser assets. In particular, the optional
+# Obsidian Headless build recipe and every local deployment file stay outside
+# the main application image.
+COPY --chown=node:node platform ./platform
+COPY --chown=node:node desktop ./desktop
+COPY --chown=node:node src ./src
+COPY --chown=node:node public ./public
+COPY --chown=node:node scripts/sync-vendor-assets.mjs ./scripts/sync-vendor-assets.mjs
+
+# Static browser dependencies are generated during the image build. Runtime can
+# therefore use a read-only root filesystem.
+RUN node scripts/sync-vendor-assets.mjs
+
+USER node
+EXPOSE 8787
+STOPSIGNAL SIGTERM
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=2m --retries=10 \
+  CMD ["node", "-e", "fetch(`http://127.0.0.1:${process.env.PORT || 8787}/health/ready`).then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"]
+
+CMD ["node", "src/bootstrap.mjs"]

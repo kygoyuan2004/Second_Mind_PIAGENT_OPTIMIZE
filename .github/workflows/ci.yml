@@ -1,0 +1,372 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'release/desktop-web-parity']
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      publish_image:
+        description: Publish the verified Pi container image
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  node:
+    name: Node 22 · ${{ matrix.runner }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-latest, windows-latest, macos-latest]
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+          cache: npm
+      - name: Record tested runner platform
+        run: |
+          node --input-type=module -e "import os from 'node:os'; console.log('::notice title=Runner platform::' + JSON.stringify({ platform: process.platform, architecture: process.arch, release: os.release(), image: process.env.ImageOS, imageVersion: process.env.ImageVersion, node: process.version }));"
+      - name: Install locked dependencies
+        run: npm ci
+      - name: Check source and public contracts
+        run: npm run check
+      - name: Prepare reproducible isolated browser gate
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          CHROME_FOR_TESTING_SHA256: 99f05b875209cdbf7490dc431a525fd373788521fb9e8aca68c761fc5fc400e5
+        run: |
+          set -Eeuo pipefail
+          archive="${RUNNER_TEMP}/chrome-for-testing-134.0.6998.88.zip"
+          browser_root="${RUNNER_TEMP}/chrome-for-testing-134.0.6998.88"
+          curl --proto '=https' --tlsv1.2 --fail --location \
+            --retry 4 --retry-all-errors \
+            --output "$archive" \
+            https://storage.googleapis.com/chrome-for-testing-public/134.0.6998.88/linux64/chrome-linux64.zip
+          printf '%s  %s\n' "$CHROME_FOR_TESTING_SHA256" "$archive" | sha256sum --check --strict
+          mkdir -p "$browser_root"
+          unzip -q "$archive" -d "$browser_root"
+          browser="${browser_root}/chrome-linux64/chrome"
+          test -x "$browser"
+          echo "SECOND_MIND_TEST_CHROME=$browser" >> "$GITHUB_ENV"
+      - name: Compile the Windows filesystem helper
+        if: runner.os == 'Windows'
+        run: node platform/native/build-native.mjs
+      - name: Prepare the pinned Windows desktop runtime
+        if: runner.os == 'Windows'
+        run: python scripts/prepare-windows-runtime.py
+      - name: Run Windows tests with ordinary filesystem permissions
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/windows-test-user-token.ps1 -NodePath (Get-Command node).Source -ProjectRoot $PWD.Path
+          exit $LASTEXITCODE
+      - name: Run offline tests
+        if: runner.os != 'Windows'
+        run: npm test
+      - name: Parse POSIX installer
+        if: runner.os != 'Windows'
+        shell: bash
+        run: bash -n install.sh
+      - name: Parse PowerShell installer with PowerShell 7
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1).Path,
+            [ref] $tokens,
+            [ref] $errors
+          ) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+      - name: Parse PowerShell installer with Windows PowerShell 5.1
+        if: runner.os == 'Windows'
+        shell: powershell
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile(
+            (Resolve-Path ./install.ps1).Path,
+            [ref] $tokens,
+            [ref] $errors
+          ) | Out-Null
+          if ($errors.Count -ne 0) {
+            $errors | ForEach-Object { Write-Error $_.Message }
+            exit 1
+          }
+      - name: Scan publishable worktree
+        if: runner.os == 'Linux'
+        run: npm run security:scan
+      - name: Check generated GitHub Pages site
+        if: runner.os == 'Linux'
+        run: npm run site:check
+      - name: Install screenshot OCR language data
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --no-install-recommends --yes \
+            tesseract-ocr tesseract-ocr-eng tesseract-ocr-chi-sim
+      - name: Scan canonical screenshots with OCR
+        if: runner.os == 'Linux'
+        run: npm run security:ocr
+      - name: Audit production dependencies
+        if: runner.os == 'Linux'
+        run: npm audit --omit=dev --audit-level=high
+
+  history:
+    name: Full-history secret scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Check out complete history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+      - name: Scan every reachable ref with pinned Gitleaks
+        run: npm run security:history
+
+  container:
+    name: Docker SDK and installer lifecycle
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Use Node.js 22
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+      - name: Prepare public synthetic fixture
+        id: fixture
+        shell: bash
+        run: |
+          fixture_root="${RUNNER_TEMP}/second-mind-container-smoke"
+          vault_root="${fixture_root}/vaults"
+          secret_root="${fixture_root}/secrets"
+          runtime_uid="$(id -u)"
+          runtime_gid="$(id -g)"
+          mkdir -p "${vault_root}/Demo Notes/.obsidian" "${secret_root}"
+          printf '# Offline demo\n\ncontainerhealthmarker is synthetic.\n' > "${vault_root}/Demo Notes/Welcome.md"
+          chmod -R u+rwX,go-rwx "${vault_root}"
+          SECRET_ROOT="${secret_root}" node --input-type=module -e "
+            import crypto from 'node:crypto';
+            import fs from 'node:fs';
+            const root = process.env.SECRET_ROOT;
+            for (const name of [
+              'admin_password',
+              'session_secret',
+              'llm_api_key',
+              'embedding_api_key',
+              'web_search_api_key',
+              'responses_api_key',
+            ]) {
+              fs.writeFileSync(root + '/' + name, 'ci-' + crypto.randomBytes(48).toString('hex'));
+            }
+          "
+          chmod 600 "${secret_root}"/*
+          env_file="${fixture_root}/compose.env"
+          {
+            printf 'SECOND_MIND_IMAGE=second-mind:ci\n'
+            printf 'KNOWLEDGE_BASE_HOST_PATH=%s\n' "${vault_root}"
+            printf 'VAULTMIND_BIND_IP=127.0.0.1\n'
+            printf 'VAULTMIND_PORT=18786\n'
+            printf 'VAULTMIND_UID=%s\n' "${runtime_uid}"
+            printf 'VAULTMIND_GID=%s\n' "${runtime_gid}"
+            printf 'ADMIN_PASSWORD_SECRET_PATH=%s/admin_password\n' "${secret_root}"
+            printf 'SESSION_SECRET_SECRET_PATH=%s/session_secret\n' "${secret_root}"
+            printf 'LLM_API_KEY_SECRET_PATH=%s/llm_api_key\n' "${secret_root}"
+            printf 'EMBEDDING_API_KEY_SECRET_PATH=%s/embedding_api_key\n' "${secret_root}"
+            printf 'WEB_SEARCH_API_KEY_SECRET_PATH=%s/web_search_api_key\n' "${secret_root}"
+            printf 'BAILIAN_RESPONSES_FALLBACK_API_KEY_SECRET_PATH=%s/responses_api_key\n' "${secret_root}"
+          } > "${env_file}"
+          chmod 600 "${env_file}"
+          {
+            echo "root=${fixture_root}"
+            echo "env_file=${env_file}"
+            echo "runtime_uid=${runtime_uid}"
+            echo "runtime_gid=${runtime_gid}"
+          } >> "$GITHUB_OUTPUT"
+      - name: Validate Compose and build allowlisted context
+        env:
+          COMPOSE_ENV: ${{ steps.fixture.outputs.env_file }}
+        run: |
+          docker compose --project-name second-mind-ci --env-file "$COMPOSE_ENV" \
+            -f compose.yaml -f compose.secrets.yaml config --quiet
+          docker compose --project-name second-mind-ci --env-file "$COMPOSE_ENV" \
+            -f compose.yaml -f compose.secrets.yaml build --pull app
+      - name: Exercise actual Linux installer lifecycle with Unicode paths
+        run: node scripts/test-installer-docker.mjs
+      - name: Run full SDK binary against isolated mock upstream inside the runtime image
+        run: |
+          docker run --rm --read-only --tmpfs /tmp:rw,nosuid,size=768m \
+            --mount type=bind,source="$GITHUB_WORKSPACE/test",target=/app/test,readonly \
+            --workdir /app --env KNOWLEDGE_BASE_ALLOWED_ROOTS= \
+            second-mind:ci node --test test/sdk-provider-matrix.test.mjs
+      - name: Start and verify live container
+        env:
+          COMPOSE_ENV: ${{ steps.fixture.outputs.env_file }}
+          FIXTURE_ROOT: ${{ steps.fixture.outputs.root }}
+          RUNTIME_UID: ${{ steps.fixture.outputs.runtime_uid }}
+          RUNTIME_GID: ${{ steps.fixture.outputs.runtime_gid }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+          phase='initialize runtime volume'
+          report_failure() {
+            status=$?
+            trap - ERR
+            echo "::error title=Container release gate::${phase} failed."
+            exit "$status"
+          }
+          compose=(docker compose --project-name second-mind-ci --env-file "$COMPOSE_ENV" -f compose.yaml -f compose.secrets.yaml)
+          cleanup() { "${compose[@]}" down --volumes --remove-orphans || true; }
+          trap report_failure ERR
+          trap cleanup EXIT
+          docker volume create \
+            --label com.docker.compose.project=second-mind-ci \
+            --label com.docker.compose.volume=vaultmind-data \
+            second-mind-ci_vaultmind-data >/dev/null
+          docker run --rm --user 0:0 \
+            --mount type=bind,source="$GITHUB_WORKSPACE",target=/workspace,readonly \
+            --mount type=volume,source=second-mind-ci_vaultmind-data,target=/app/data \
+            second-mind:ci node /workspace/scripts/install.mjs internal-own-tree \
+            --source /app/data --output-uid "$RUNTIME_UID" --output-gid "$RUNTIME_GID"
+          phase='start Compose application'
+          "${compose[@]}" up -d --no-build
+          phase='wait for live and ready health endpoints'
+          ready=false
+          for _ in $(seq 1 60); do
+            if curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18786/health/live >/dev/null \
+              && curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18786/health/ready >/dev/null; then
+              ready=true
+              break
+            fi
+            sleep 2
+          done
+          if [[ $ready != true ]]; then
+            "${compose[@]}" ps
+            "${compose[@]}" logs --no-color --tail 200 app > "$FIXTURE_ROOT/app.log" 2>&1 || true
+            if FIXTURE_ROOT="$FIXTURE_ROOT" node --input-type=module -e "
+              import fs from 'node:fs';
+              const root = process.env.FIXTURE_ROOT;
+              const logs = fs.readFileSync(root + '/app.log', 'utf8');
+              for (const name of [
+                'admin_password',
+                'session_secret',
+                'llm_api_key',
+                'embedding_api_key',
+                'web_search_api_key',
+                'responses_api_key',
+              ]) {
+                const secret = fs.readFileSync(root + '/secrets/' + name, 'utf8');
+                if (secret && logs.includes(secret)) process.exit(1);
+              }
+            " 2>/dev/null; then
+              cat "$FIXTURE_ROOT/app.log"
+            else
+              echo 'Container logs contained a synthetic secret and were withheld.'
+            fi
+            exit 1
+          fi
+          phase='verify application and release metadata'
+          curl --fail --silent --show-error --max-time 5 http://127.0.0.1:18786/ > /dev/null
+          container_id=$("${compose[@]}" ps -q app)
+          docker inspect "$container_id" > "$FIXTURE_ROOT/inspect.json"
+          docker history --no-trunc second-mind:ci > "$FIXTURE_ROOT/history.txt"
+          "${compose[@]}" logs --no-color app > "$FIXTURE_ROOT/app.log" 2>&1
+          FIXTURE_ROOT="$FIXTURE_ROOT" node --input-type=module -e "
+            import fs from 'node:fs';
+            const root = process.env.FIXTURE_ROOT;
+            const inspect = fs.readFileSync(root + '/inspect.json', 'utf8');
+            const history = fs.readFileSync(root + '/history.txt', 'utf8');
+            const logs = fs.readFileSync(root + '/app.log', 'utf8');
+            for (const name of [
+              'admin_password',
+              'session_secret',
+              'llm_api_key',
+              'embedding_api_key',
+              'web_search_api_key',
+              'responses_api_key',
+            ]) {
+              const secret = fs.readFileSync(root + '/secrets/' + name, 'utf8');
+              if (!secret) {
+                throw new Error('A synthetic file-backed secret was unexpectedly empty.');
+              }
+              if (inspect.includes(secret) || history.includes(secret) || logs.includes(secret)) {
+                throw new Error('A file-backed secret reached release diagnostics or container metadata.');
+              }
+            }
+          "
+
+  publish:
+    name: Publish verified multi-architecture image
+    if: (github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')) || (github.event_name == 'workflow_dispatch' && inputs.publish_image && github.ref == 'refs/heads/main')
+    needs: [node, history, container]
+    permissions:
+      contents: read
+      packages: write
+    uses: ./.github/workflows/container.yml
+
+  windows-desktop:
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release/desktop-web-parity'
+    uses: ./.github/workflows/windows-build.yml
+
+  linux-desktop:
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/release/desktop-web-parity'
+    uses: ./.github/workflows/linux-desktop.yml
+
+  release-installers:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [publish, windows-desktop, linux-desktop]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@v4
+        with:
+          name: SecondMind-windows-x64
+          path: packages/windows
+      - uses: actions/download-artifact@v4
+        with:
+          name: SecondMind-linux-x64
+          path: packages/linux
+      - name: Publish verified installers and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          (cd packages/windows && sha256sum -c SHA256SUMS.txt)
+          (cd packages/linux && sha256sum -c SHA256SUMS.txt)
+          cat packages/{windows,linux}/SHA256SUMS.txt > SHA256SUMS.txt
+          notes="docs/release-notes-${GITHUB_REF_NAME#v}.md"
+          description=(--generate-notes)
+          if [[ -f "$notes" ]]; then description=(--notes-file "$notes"); fi
+          gh release create "$GITHUB_REF_NAME" --verify-tag --repo "$GITHUB_REPOSITORY" --title "Second Mind $GITHUB_REF_NAME" "${description[@]}" packages/windows/*.exe packages/linux/*.AppImage packages/linux/*.deb SHA256SUMS.txt

@@ -1,0 +1,92 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: "${SECOND_MIND_IMAGE:-ghcr.io/kygoyuan2004/second_mind_piagent_optimize:latest}"
+    restart: unless-stopped
+    init: true
+    user: "${VAULTMIND_UID:-1000}:${VAULTMIND_GID:-1000}"
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8787
+      APP_NAME: "${APP_NAME:-Second Mind}"
+      VAULT_LABEL: "${VAULT_LABEL:-My Obsidian Vault}"
+      TIMEZONE: "${TIMEZONE:-UTC}"
+      TRUST_PROXY: "${TRUST_PROXY:-false}"
+      SECURE_COOKIE: "${SECURE_COOKIE:-false}"
+      VAULT_PATH: /vaults
+      KNOWLEDGE_BASE_ALLOWED_ROOTS: /vaults
+      DATA_DIR: /app/data
+      PUBLIC_DIR: /app/public
+      INDEX_DIR: /app/data/index
+      DRAFT_DIR: /app/data/drafts
+      RECOVERY_DIR: /app/data/recovery
+      CONVERSATION_FILE: /app/data/conversations.json
+      AUDIT_FILE: /app/data/audit.jsonl
+      VAULT_AUTO_CREATE_PATHS: "${VAULT_AUTO_CREATE_PATHS:-true}"
+      DIARY_DIR: "${DIARY_DIR:-Second-Mind/Diary}"
+      PLAN_DIR: "${PLAN_DIR:-Second-Mind/Plans}"
+      SCRATCH_DIR: "${SCRATCH_DIR:-Second-Mind/Inbox}"
+      DIARY_TEMPLATE: "${DIARY_TEMPLATE:-}"
+      PLAN_TEMPLATE: "${PLAN_TEMPLATE:-}"
+      VAULT_EXCLUDED_PATHS: "${VAULT_EXCLUDED_PATHS:-.obsidian,.trash,.git,.sync,.livesync,node_modules}"
+      ADMIN_USERNAME: "${ADMIN_USERNAME:-admin}"
+      SESSION_TTL_SECONDS: "${SESSION_TTL_SECONDS:-43200}"
+      LLM_PROVIDER: "${LLM_PROVIDER:-anthropic}"
+      LLM_API_BASE: "${LLM_API_BASE:-}"
+      LLM_MODEL: "${LLM_MODEL:-}"
+      EMBEDDING_PROVIDER: "${EMBEDDING_PROVIDER:-disabled}"
+      EMBEDDING_API_BASE: "${EMBEDDING_API_BASE:-}"
+      EMBEDDING_ENDPOINT: "${EMBEDDING_ENDPOINT:-}"
+      EMBEDDING_MODEL: "${EMBEDDING_MODEL:-nomic-embed-text}"
+      EMBEDDING_DIMENSIONS: "${EMBEDDING_DIMENSIONS:-768}"
+      EMBEDDING_BATCH_SIZE: "${EMBEDDING_BATCH_SIZE:-20}"
+      EMBEDDING_TIMEOUT_MS: "${EMBEDDING_TIMEOUT_MS:-12000}"
+      ALLOW_INSECURE_PROVIDER_HTTP: "${ALLOW_INSECURE_PROVIDER_HTTP:-false}"
+      WEB_SEARCH_ENABLED: "${WEB_SEARCH_ENABLED:-false}"
+      WEB_SEARCH_TIMEOUT_MS: "${WEB_SEARCH_TIMEOUT_MS:-60000}"
+      WEB_SEARCH_RESULT_COUNT: "${WEB_SEARCH_RESULT_COUNT:-8}"
+      INDEX_WATCH: "${INDEX_WATCH:-true}"
+      INDEX_RECONCILE_SECONDS: "${INDEX_RECONCILE_SECONDS:-300}"
+      MAX_JSON_BODY_BYTES: "${MAX_JSON_BODY_BYTES:-25165824}"
+      MAX_ATTACHMENT_COUNT: "${MAX_ATTACHMENT_COUNT:-8}"
+      MAX_ATTACHMENT_BYTES: "${MAX_ATTACHMENT_BYTES:-5242880}"
+      MAX_ATTACHMENT_TOTAL_BYTES: "${MAX_ATTACHMENT_TOTAL_BYTES:-15728640}"
+      RECOVERY_RETENTION_DAYS: "${RECOVERY_RETENTION_DAYS:-30}"
+      SYNC_PROVIDER: "${SYNC_PROVIDER:-filesystem}"
+      SYNC_DISPLAY_NAME: "${SYNC_DISPLAY_NAME:-Filesystem}"
+    ports:
+      - "${VAULTMIND_BIND_IP:-127.0.0.1}:${VAULTMIND_PORT:-8787}:8787"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    volumes:
+      - vaultmind-data:/app/data
+      - type: bind
+        source: "${KNOWLEDGE_BASE_HOST_PATH:-./vault}"
+        target: /vaults
+        bind:
+          create_host_path: false
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=768m,mode=1777
+    pids_limit: 256
+    stop_grace_period: 30s
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:8787/health/ready').then((response) => { if (!response.ok) process.exit(1); }).catch(() => process.exit(1));"
+      interval: 30s
+      timeout: 5s
+      start_period: 2m
+      retries: 10
+
+volumes:
+  vaultmind-data:
