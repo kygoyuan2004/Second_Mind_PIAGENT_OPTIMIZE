@@ -35,7 +35,7 @@ jobs:
           if [[ "$GITHUB_REF_TYPE" = tag ]]; then test "$GITHUB_REF_NAME" = "$tag"; fi
           node scripts/release-assets.mjs packages release-files "$tag"
           (cd release-files && sha256sum -c SHA256SUMS.txt)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: verified-installers
           path: release-files/

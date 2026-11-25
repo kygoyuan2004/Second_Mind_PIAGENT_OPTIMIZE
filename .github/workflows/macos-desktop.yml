@@ -65,7 +65,7 @@ jobs:
           export SECOND_MIND_PACKAGED_EXECUTABLE="$app/Contents/MacOS/Second Mind Pi"
           node --test --test-timeout=180000 test/desktop-shell.electron.mjs
           (cd "$dir" && shasum -a 256 "$name" > SHA256SUMS.txt && shasum -a 256 -c SHA256SUMS.txt)
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SecondMindPi-macos-${{ matrix.arch }}
           path: |

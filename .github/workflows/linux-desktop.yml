@@ -37,7 +37,7 @@ jobs:
           sudo apt-get remove -y second-mind-pi
           xvfb-run -a node scripts/desktop-coexistence.mjs survivor "$state" "$(command -v second-mind)"
           sudo apt-get remove -y second-mind
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: SecondMindPi-linux-x64
           path: |
