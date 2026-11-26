@@ -2,6 +2,11 @@ name: Container image
 
 on:
   workflow_call:
+    inputs:
+      preview_source:
+        description: Commit of the tested preview tag
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -17,8 +22,25 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Check the release tag before uploading any image
-        run: node -e 'if (process.env.GITHUB_REF_TYPE !== "tag" || process.env.GITHUB_REF_NAME !== "v" + require("./package.json").version) process.exit(1)'
+          ref: ${{ inputs.preview_source || github.sha }}
+      - name: Check the release source and select its channel
+        id: source
+        env:
+          PREVIEW_SOURCE: ${{ inputs.preview_source }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          commit=$(git rev-parse HEAD)
+          if [[ -n "$PREVIEW_SOURCE" ]]; then
+            tag="preview-v$version"
+            test "$GITHUB_REF" = "refs/heads/publish/pi-$version-preview"
+            test "$commit" = "$PREVIEW_SOURCE"
+            test "$(git ls-remote --refs "$GITHUB_SERVER_URL/$GITHUB_REPOSITORY.git" "refs/tags/$tag" | cut -f1)" = "$commit"
+            echo "preview_tag=ghcr.io/kygoyuan2004/second_mind_piagent_optimize:$tag" >> "$GITHUB_OUTPUT"
+          else
+            test "$GITHUB_REF" = "refs/tags/v$version"
+          fi
+          echo "commit=$commit" >> "$GITHUB_OUTPUT"
       - name: Enable emulated architectures
         uses: docker/setup-qemu-action@c7c53464625b32c7a7e944ae62b3e17d2b600130 # v3
       - name: Configure Buildx
@@ -46,8 +68,10 @@ jobs:
           file: ./Dockerfile
           platforms: linux/amd64,linux/arm64
           push: true
-          tags: ghcr.io/kygoyuan2004/second_mind_piagent_optimize:candidate-${{ github.sha }}
-          labels: ${{ steps.metadata.outputs.labels }}
+          tags: ghcr.io/kygoyuan2004/second_mind_piagent_optimize:candidate-${{ steps.source.outputs.commit }}
+          labels: |
+            ${{ steps.metadata.outputs.labels }}
+            org.opencontainers.image.revision=${{ steps.source.outputs.commit }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
           provenance: true
@@ -57,6 +81,7 @@ jobs:
       - name: Verify SDK and media on both container architectures
         env:
           CANDIDATE: ghcr.io/kygoyuan2004/second_mind_piagent_optimize@${{ steps.image.outputs.digest }}
+          PREVIEW_TAG: ${{ steps.source.outputs.preview_tag }}
         run: |
           set -Eeuo pipefail
           run_gate() {
@@ -89,12 +114,24 @@ jobs:
             run_gate "$platform media" docker run --rm --platform "$platform" --read-only "$CANDIDATE" \
               /opt/media/bin/python -c 'import av, ctranslate2, faster_whisper, yt_dlp; print("media imports passed")'
             run_gate "$platform ffmpeg" docker run --rm --platform "$platform" --read-only "$CANDIDATE" ffmpeg -version
+            if [[ -n "$PREVIEW_TAG" ]]; then
+              run_gate "$platform speech model" docker run --rm --platform "$platform" --read-only --tmpfs /tmp "$CANDIDATE" \
+                node --input-type=module -e '
+                  import assert from "node:assert/strict";
+                  import { SpeechModel } from "./src/speech-model.mjs";
+                  const model = new SpeechModel({ stateRoot: "/tmp/preview", python: "/opt/media/bin/python" });
+                  const status = await model.status();
+                  assert.equal(status.state, "not-downloaded");
+                  assert.equal(status.totalBytes, 486212372);
+                  await model.close();
+                '
+            fi
             docker image rm "$CANDIDATE"
           done
       - name: Promote the verified digest to release tags
         env:
           CANDIDATE: ghcr.io/kygoyuan2004/second_mind_piagent_optimize@${{ steps.image.outputs.digest }}
-          RELEASE_TAGS: ${{ steps.metadata.outputs.tags }}
+          RELEASE_TAGS: ${{ steps.source.outputs.preview_tag || steps.metadata.outputs.tags }}
         run: |
           set -Eeuo pipefail
           tags=()
